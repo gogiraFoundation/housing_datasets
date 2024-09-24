@@ -1,0 +1,35 @@
+Starting Operation...
+The total number of cells is 6859
+The total number of missing values: 5
+Percentage of missing values in dataset: 0.07%
+
+Missing values per column:
+Revised    5
+dtype: int64
+  Revised Region or Country Name Local Authority Code  Local Authority Name 2009-2010 2010-2011  ... 2018-2019 2019-2020 2020-2021 2021-2022 2022-2023 2023-2024
+0                     North East            E06000001            Hartlepool       230       230  ...       260       160       330       490       590       480
+1     [r]             North East            E06000002         Middlesbrough       280      [x]   ...       610       420       540       690       460       550
+2                     North East            E06000003  Redcar and Cleveland       240       210  ...       410       370       430       390       510       420
+3     [r]             North East            E06000004      Stockton-on-Tees       440       500  ...      1030       580       390       590       780       520
+4     [r]             North East            E06000005            Darlington       130       230  ...       540       500       430       430       520       380
+
+[5 rows x 19 columns]
+Filled missing values with 'unknown'.
+
+Original columns: ['Revised', 'Region or Country Name', 'Local Authority Code', 'Local Authority Name', '2009-2010', '2010-2011', '2011-2012', '2012-2013', '2013-2014', '2014-2015', '2015-2016', '2016-2017', '2017-2018', '2018-2019', '2019-2020', '2020-2021', '2021-2022', '2022-2023', '2023-2024']
+
+
+Column names after renaming: ['Region Type', 'Region or Country Name', 'Local Authority Code', 'Local Authority Name', '2009-2010', '2010-2011', '2011-2012', '2012-2013', '2013-2014', '2014-2015', '2015-2016', '2016-2017', '2017-2018', '2018-2019', '2019-2020', '2020-2021', '2021-2022', '2022-2023', '2023-2024']
+
+DataFrame info:
+None
+
+First few rows of cleaned data:
+  Region Type Region or Country Name Local Authority Code  Local Authority Name 2009-2010 2010-2011  ... 2018-2019 2019-2020 2020-2021 2021-2022 2022-2023 2023-2024
+0                         North East            E06000001            Hartlepool       230       230  ...       260       160       330       490       590       480
+1         [r]             North East            E06000002         Middlesbrough       280      [x]   ...       610       420       540       690       460       550
+2                         North East            E06000003  Redcar and Cleveland       240       210  ...       410       370       430       390       510       420
+3         [r]             North East            E06000004      Stockton-on-Tees       440       500  ...      1030       580       390       590       780       520
+4         [r]             North East            E06000005            Darlington       130       230  ...       540       500       430       430       520       380
+
+[5 rows x 19 columns]
