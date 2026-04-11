@@ -1,0 +1,11 @@
+{
+  "source_url": "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/housing/datasets/mainfueltypeormethodofheatingusedincentralheatingenglandandwales/march2025/mainfueltypeenglandandwales.xlsx",
+  "dataset_page_url": "https://www.ons.gov.uk/peoplepopulationandcommunity/housing/datasets/mainfueltypeormethodofheatingusedincentralheatingenglandandwales",
+  "edition_key": "march2025",
+  "edition_label": "March 2025",
+  "downloaded_at": "2026-04-10T10:23:24Z",
+  "sha256": "8df796837a0fb2eb974b3325dc3c34732e142ac8a669eab5fb9a364ec2cdd121",
+  "bytes": 1464639,
+  "file_name": "ons_mainfuel_march2025.xlsx",
+  "attribution": "Contains public sector information licensed under the Open Government Licence v3.0. Source: Office for National Statistics."
+}

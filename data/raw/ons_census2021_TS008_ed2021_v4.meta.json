@@ -1,0 +1,17 @@
+{
+  "source_url": "https://download.ons.gov.uk/downloads/datasets/TS008/editions/2021/versions/4.xlsx",
+  "csv_url": "https://download.ons.gov.uk/downloads/datasets/TS008/editions/2021/versions/4.csv",
+  "dataset_page_url": "https://www.ons.gov.uk/datasets/TS008/editions/2021/versions/4",
+  "bulletin_url": "https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates/bulletins/populationandhouseholdestimatesenglandandwales/census2021unroundeddata",
+  "dataset_id": "TS008",
+  "edition": "2021",
+  "version": 4,
+  "api_self_url": "https://api.beta.ons.gov.uk/v1/datasets/TS008/editions/2021/versions/4",
+  "edition_key": "sex_ts008",
+  "edition_label": "Sex (lower tier local authorities)",
+  "downloaded_at": "2026-04-10T12:15:09Z",
+  "sha256": "9ea792659ac6a9970e0bb11f4d7a9b44a4d1bf56867f7bb69e61fa14f6ea93cd",
+  "bytes": 26907,
+  "file_name": "ons_census2021_TS008_ed2021_v4.xlsx",
+  "attribution": "Contains public sector information licensed under the Open Government Licence v3.0. Source: Office for National Statistics."
+}

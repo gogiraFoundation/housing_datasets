@@ -1,0 +1,11 @@
+{
+  "source_url": "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/housing/datasets/energyefficiencyofhousingenglandandwalesfiveyearsrolling/march2025/energyefficiencyofhousingenglandandwalesfiverollingyears.xlsx",
+  "dataset_page_url": "https://www.ons.gov.uk/peoplepopulationandcommunity/housing/datasets/energyefficiencyofhousingenglandandwalesfiveyearsrolling",
+  "edition_key": "march2025",
+  "edition_label": "March 2025",
+  "downloaded_at": "2026-04-10T10:23:22Z",
+  "sha256": "74cc72e56458fbeffb55a765c2dd69f16b712a01c52b0c2535aff37ddbc59e24",
+  "bytes": 98645,
+  "file_name": "ons_ee_fiveyear_march2025.xlsx",
+  "attribution": "Contains public sector information licensed under the Open Government Licence v3.0. Source: Office for National Statistics."
+}

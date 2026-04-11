@@ -1,0 +1,11 @@
+{
+  "source_url": "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/housing/datasets/ratioofhousepricetoworkplacebasedearningslowerquartileandmedian/current/aff1ratioofhousepricetoworkplacebasedearnings.xlsx",
+  "dataset_page_url": "https://www.ons.gov.uk/peoplepopulationandcommunity/housing/datasets/ratioofhousepricetoworkplacebasedearningslowerquartileandmedian",
+  "edition_key": "current",
+  "edition_label": "Current edition",
+  "downloaded_at": "2026-04-10T14:00:44Z",
+  "sha256": "585bc98112e801fc3dd45dbc5238d05c6507d4e48dc3ec3afab4867eded1c2f4",
+  "bytes": 513860,
+  "file_name": "ons_price_earnings_ratio_current.xlsx",
+  "attribution": "Contains public sector information licensed under the Open Government Licence v3.0. Source: Office for National Statistics."
+}

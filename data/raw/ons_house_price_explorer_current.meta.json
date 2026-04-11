@@ -1,0 +1,11 @@
+{
+  "source_url": "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/housing/datasets/housepriceexplorer/current/housepriceexplorer_tcm77-395364.xls",
+  "dataset_page_url": "https://www.ons.gov.uk/peoplepopulationandcommunity/housing/datasets/housepriceexplorer",
+  "edition_key": "current",
+  "edition_label": "Current",
+  "downloaded_at": "2026-04-10T14:50:22Z",
+  "sha256": "6c86f45f365eff69f6d8ba59182531a76556b88262ea7bc943a5691c9f485abd",
+  "bytes": 649216,
+  "file_name": "ons_house_price_explorer_current.xls",
+  "attribution": "Contains public sector information licensed under the Open Government Licence v3.0. Source: Office for National Statistics."
+}

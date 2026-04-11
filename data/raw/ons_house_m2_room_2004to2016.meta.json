@@ -1,0 +1,11 @@
+{
+  "source_url": "https://www.ons.gov.uk/file?uri=/economy/inflationandpriceindices/datasets/housepricepersquaremetreandhousepriceperroomenglandandwales/2004to2016/priceperareadata.xls",
+  "dataset_page_url": "https://www.ons.gov.uk/economy/inflationandpriceindices/datasets/housepricepersquaremetreandhousepriceperroomenglandandwales",
+  "edition_key": "2004to2016",
+  "edition_label": "2004 to 2016",
+  "downloaded_at": "2026-04-10T14:50:14Z",
+  "sha256": "2eaa95c3cc6017a0cd6fcbbc26bf618c76faf7178005a65f5896b896f82771f6",
+  "bytes": 773632,
+  "file_name": "ons_house_m2_room_2004to2016.xls",
+  "attribution": "Contains public sector information licensed under the Open Government Licence v3.0. Source: Office for National Statistics."
+}

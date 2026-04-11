@@ -1,0 +1,11 @@
+{
+  "source_url": "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/housing/datasets/medianhousepricesforadministrativegeographiesnewlybuiltdwellings/yearendingseptember2025/medianpricepaidforadministrativegeographiesnew.xlsx",
+  "dataset_page_url": "https://www.ons.gov.uk/peoplepopulationandcommunity/housing/datasets/medianhousepricesforadministrativegeographiesnewlybuiltdwellings",
+  "edition_key": "yearendingseptember2025",
+  "edition_label": "Year ending September 2025",
+  "downloaded_at": "2026-04-10T14:50:18Z",
+  "sha256": "39e2740d10585f11bd61959117c72f4e3cf351a985ed8b9e91440b8bfb128dda",
+  "bytes": 2163665,
+  "file_name": "ons_median_price_new_admin_yearendingseptember2025.xlsx",
+  "attribution": "Contains public sector information licensed under the Open Government Licence v3.0. Source: Office for National Statistics."
+}

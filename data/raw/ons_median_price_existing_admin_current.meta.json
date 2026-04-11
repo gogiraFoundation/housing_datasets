@@ -1,0 +1,11 @@
+{
+  "source_url": "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/housing/datasets/medianhousepricesforadministrativegeographiesexistingdwellings/yearendingseptember2025/medianpricepaidforadministrativegeographiesexisting.xlsx",
+  "dataset_page_url": "https://www.ons.gov.uk/peoplepopulationandcommunity/housing/datasets/medianhousepricesforadministrativegeographiesexistingdwellings",
+  "edition_key": "current",
+  "edition_label": "Current (latest pinned release)",
+  "downloaded_at": "2026-04-10T14:30:07Z",
+  "sha256": "fba3e10ed2a2b32bfb6735b10c3b43b14dec689aeca9dee552151cbc2a9e401b",
+  "bytes": 2043645,
+  "file_name": "ons_median_price_existing_admin_current.xlsx",
+  "attribution": "Contains public sector information licensed under the Open Government Licence v3.0. Source: Office for National Statistics."
+}

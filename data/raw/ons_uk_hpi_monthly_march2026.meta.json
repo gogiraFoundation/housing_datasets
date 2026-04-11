@@ -1,0 +1,11 @@
+{
+  "source_url": "https://www.ons.gov.uk/file?uri=/economy/inflationandpriceindices/datasets/ukhousepriceindexmonthlypricestatistics/25march2026/ukhousepriceindexmonthlypricestatistics.xlsx",
+  "dataset_page_url": "https://www.ons.gov.uk/economy/inflationandpriceindices/datasets/ukhousepriceindexmonthlypricestatistics",
+  "edition_key": "march2026",
+  "edition_label": "March 2026",
+  "downloaded_at": "2026-04-10T14:50:13Z",
+  "sha256": "297cba23c52b3debe2b382ed09e1c11a92193c6d838b5a03c3ab195990d8fef2",
+  "bytes": 181317,
+  "file_name": "ons_uk_hpi_monthly_march2026.xlsx",
+  "attribution": "Contains public sector information licensed under the Open Government Licence v3.0. Source: Office for National Statistics."
+}

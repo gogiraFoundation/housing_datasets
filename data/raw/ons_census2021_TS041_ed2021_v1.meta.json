@@ -1,0 +1,17 @@
+{
+  "source_url": "https://download.ons.gov.uk/downloads/datasets/TS041/editions/2021/versions/1.xlsx",
+  "csv_url": "https://download.ons.gov.uk/downloads/datasets/TS041/editions/2021/versions/1.csv",
+  "dataset_page_url": "https://www.ons.gov.uk/datasets/TS041/editions/2021/versions/1",
+  "bulletin_url": "https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates/bulletins/populationandhouseholdestimatesenglandandwales/census2021unroundeddata",
+  "dataset_id": "TS041",
+  "edition": "2021",
+  "version": 1,
+  "api_self_url": "https://api.beta.ons.gov.uk/v1/datasets/TS041/editions/2021/versions/1",
+  "edition_key": "households_ts041",
+  "edition_label": "Number of households (lower tier local authorities)",
+  "downloaded_at": "2026-04-10T12:15:02Z",
+  "sha256": "9fce29d91229d0a349e3e597dc55a5a9f832d5bc911a9eb7cf589c64ca6249f2",
+  "bytes": 17712,
+  "file_name": "ons_census2021_TS041_ed2021_v1.xlsx",
+  "attribution": "Contains public sector information licensed under the Open Government Licence v3.0. Source: Office for National Statistics."
+}
