@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
 REPO_ROOT = Path(__file__).resolve().parent
-PROCESSED_DIR = REPO_ROOT / "data" / "processed"
+
+
+def processed_data_directory() -> Path:
+    """Directory for tidy Parquet/CSV (default: ``<repo>/data/processed``).
+
+    Set environment variable ``HOUSING_PROCESSED_DIR`` to an absolute path in deployments
+    where ``data/processed`` is not in the image (it is gitignored) but artefacts are
+    mounted or copied elsewhere.
+    """
+    raw = os.environ.get("HOUSING_PROCESSED_DIR", "").strip()
+    if raw:
+        return Path(raw).expanduser().resolve()
+    return (REPO_ROOT / "data" / "processed").resolve()
+
+
+PROCESSED_DIR = processed_data_directory()
 
 
 def resolve_processed_data_path(path: str | Path) -> Path:

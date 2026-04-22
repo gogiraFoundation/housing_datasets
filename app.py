@@ -2,12 +2,40 @@
 
 from __future__ import annotations
 
+import os
+
 import streamlit as st
+
+from streamlit_io import PROCESSED_DIR
 
 st.set_page_config(
     page_title="UK housing datasets",
     layout="wide",
 )
+
+
+def _processed_parquet_count() -> int:
+    if not PROCESSED_DIR.is_dir():
+        return 0
+    return sum(1 for _ in PROCESSED_DIR.glob("*.parquet"))
+
+
+if _processed_parquet_count() == 0:
+    override = os.environ.get("HOUSING_PROCESSED_DIR", "").strip()
+    st.error(
+        "**No processed Parquet files found.** The dashboard reads tidy outputs from a single directory "
+        "(by default `data/processed/`, which is **gitignored**). Without those files, topic pages will be empty "
+        "or show “missing file” warnings."
+    )
+    st.markdown(
+        "- **Local:** run `./start.sh` (runs ETL then the app) or `python scripts/run_etl_suite.py` then Streamlit.\n"
+        "- **Deployed:** run the same ETL in your image build or release job, **or** copy pre-built `*.parquet` into "
+        "the container and set **`HOUSING_PROCESSED_DIR`** to that absolute path (Streamlit Cloud: "
+        "[Secrets](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/secrets-management) "
+        "cannot mount files — use a build step that writes Parquet into the image, or a host path your platform supports)."
+    )
+    if override:
+        st.warning(f"`HOUSING_PROCESSED_DIR` is set to `{override}` → resolved `{PROCESSED_DIR}` but no `*.parquet` was found there.")
 
 st.title("UK housing datasets")
 st.caption("Tidy housing statistics from Excel workbooks — pick a page in the sidebar.")

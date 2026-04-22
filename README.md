@@ -101,6 +101,8 @@ To refresh pipelines then open the app, run `./start.sh` from the repo root (req
 
 Use the sidebar to open each theme. Processed Parquet/CSV files must exist under `data/processed/` for the ONS-backed pages (run the matching ETL first).
 
+**Hosted / container deploys:** `data/processed/*` is **gitignored**, so a clean checkout has **no** Parquet until you run ETL in the image build or copy artefacts in. Set **`HOUSING_PROCESSED_DIR`** to an absolute path where those `*.parquet` files live (Streamlit and the FastAPI API both honour it). The home page shows a clear notice when no Parquet is found.
+
 Optional wrapper with health checks and restart: [`run_dashboard.py`](run_dashboard.py).
 
 ### Tests
@@ -121,7 +123,7 @@ After building ``data/processed/`` outputs, you can serve them read-only via the
 python run_api.py
 ```
 
-Defaults to ``127.0.0.1:8000``. Clients send ``Authorization: Bearer <key>`` or ``X-API-Key: <key>``. Configure keys with **one** of: ``HOUSING_API_KEYS`` (comma-separated), ``HOUSING_API_KEYS_FILE`` (path to a file: newline-separated keys or a single comma-separated line), or ``HOUSING_API_KEYS_SECRET_ID`` (AWS Secrets Manager secret id/ARN; install ``boto3``). If ``HOUSING_API_KEYS`` is non-empty it wins over file and secret. Set ``HOUSING_REPO_ROOT`` if the process cwd is not the repository root.
+Defaults to ``127.0.0.1:8000``. Clients send ``Authorization: Bearer <key>`` or ``X-API-Key: <key>``. Configure keys with **one** of: ``HOUSING_API_KEYS`` (comma-separated), ``HOUSING_API_KEYS_FILE`` (path to a file: newline-separated keys or a single comma-separated line), or ``HOUSING_API_KEYS_SECRET_ID`` (AWS Secrets Manager secret id/ARN; install ``boto3``). If ``HOUSING_API_KEYS`` is non-empty it wins over file and secret. Set ``HOUSING_REPO_ROOT`` if the process cwd is not the repository root. Set ``HOUSING_PROCESSED_DIR`` if tidy Parquet lives outside ``<repo>/data/processed`` (same variable as Streamlit).
 
 **Production defaults:** set ``HOUSING_API_ENV=production`` so OpenAPI/Swagger under ``/api/v1/docs`` is off unless you set ``HOUSING_API_DOCS=1``. Treat ``HOUSING_API_KEYS`` like any secret (do not commit; use a secret manager or mounted file in Kubernetes/ECS).
 

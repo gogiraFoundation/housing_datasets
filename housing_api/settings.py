@@ -117,6 +117,14 @@ def repo_root() -> str:
     return os.environ.get("HOUSING_REPO_ROOT", "")
 
 
+def resolved_processed_dir(repo_root: Path) -> Path:
+    """Tidy outputs directory: ``HOUSING_PROCESSED_DIR`` or ``<repo_root>/data/processed``."""
+    raw = os.environ.get("HOUSING_PROCESSED_DIR", "").strip()
+    if raw:
+        return Path(raw).expanduser().resolve()
+    return (repo_root / "data" / "processed").resolve()
+
+
 def default_page_limit() -> int:
     return max(1, _int_env("HOUSING_API_DEFAULT_LIMIT", 500))
 

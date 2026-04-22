@@ -36,6 +36,8 @@ from ons_private_rental_index_config import PRIVATE_RENTAL_INDEX_EDITIONS
 from ons_uk_hpi_monthly_config import UK_HPI_DATA_SHEETS, UK_HPI_MONTHLY_EDITIONS
 from ons_vacant_second_homes_config import VACANT_SECOND_HOMES_DATA_SHEETS, VACANT_SECOND_HOMES_EDITIONS
 
+from housing_api.settings import resolved_processed_dir
+
 
 @dataclass(frozen=True)
 class DatasetMeta:
@@ -297,7 +299,7 @@ REGISTRY: dict[str, DatasetMeta] = build_registry()
 
 def safe_processed_path(repo_root: Path, meta: DatasetMeta) -> Path | None:
     """Resolve path under data/processed only; return None if traversal or bad layout."""
-    processed = (repo_root / "data" / "processed").resolve()
+    processed = resolved_processed_dir(repo_root)
     target = (processed / meta.filename).resolve()
     try:
         target.relative_to(processed)

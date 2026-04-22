@@ -11,10 +11,11 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 from housing_api.registry import DatasetMeta, safe_processed_path
+from housing_api.settings import resolved_processed_dir
 
 
 def load_manifest(repo_root: Path) -> dict[str, Any] | None:
-    p = repo_root / "data" / "processed" / "processed_manifest.json"
+    p = resolved_processed_dir(repo_root) / "processed_manifest.json"
     if not p.is_file():
         return None
     try:
@@ -39,7 +40,7 @@ def dataset_disk_meta(repo_root: Path, meta: DatasetMeta) -> tuple[bool, int | N
         return False, None, None, None
     st = path.stat()
     mtime_iso = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat()
-    rel = str(path.relative_to(repo_root))
+    rel = f"data/processed/{meta.filename}"
     man = load_manifest(repo_root)
     mrow = manifest_row_for_file(man, rel)
     columns = None
