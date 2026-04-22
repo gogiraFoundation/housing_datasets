@@ -105,6 +105,22 @@ Use the sidebar to open each theme. Processed Parquet/CSV files must exist under
 
 Optional wrapper with health checks and restart: [`run_dashboard.py`](run_dashboard.py).
 
+### Build Parquet before boot (image/workspace)
+
+Use the build helper when your host starts Streamlit directly and does not run `start.sh`:
+
+```bash
+./scripts/build_deploy_parquet.sh
+```
+
+Defaults: `ETL_PROFILE=standard` and `ETL_WITH_JOINS=1`. Override if needed:
+
+```bash
+ETL_PROFILE=full ETL_WITH_JOINS=1 ./scripts/build_deploy_parquet.sh
+```
+
+For containerized deploys, [`Dockerfile`](Dockerfile) runs this script at image build so `data/processed/*.parquet` exists before app boot.
+
 ### Tests
 
 From the repository root:
