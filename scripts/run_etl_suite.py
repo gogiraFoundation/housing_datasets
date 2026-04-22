@@ -33,6 +33,12 @@ def _step(step_id: str, script: str, *args: str, timeout: int | None = None) -> 
     return step_id, cmd, t
 
 
+def _step_module(step_id: str, module: str, *args: str, timeout: int | None = None) -> tuple[str, list[str], int]:
+    t = timeout if timeout is not None else int(os.environ.get("HOUSING_ETL_STEP_TIMEOUT", "3600"))
+    cmd = [_py(), "-m", module, *args]
+    return step_id, cmd, t
+
+
 def standard_steps() -> list[tuple[str, list[str], int]]:
     return [
         _step("uk_local_authority_housing", "uk_local_authority_housing_data.py"),
@@ -66,11 +72,11 @@ def full_extra_steps() -> list[tuple[str, list[str], int]]:
 
 def join_steps() -> list[tuple[str, list[str], int]]:
     return [
-        _step("join_la_housebuilding_mainfuel", "joins/build_joined_la_housebuilding_mainfuel.py"),
-        _step("aggregate_la_supply_to_region", "joins/aggregate_la_supply_to_region.py"),
-        _step(
+        _step_module("join_la_housebuilding_mainfuel", "joins.build_joined_la_housebuilding_mainfuel"),
+        _step_module("aggregate_la_supply_to_region", "joins.aggregate_la_supply_to_region"),
+        _step_module(
             "build_la_housing_market_snapshot",
-            "joins/build_la_housing_market_snapshot.py",
+            "joins.build_la_housing_market_snapshot",
             "--vacant-second-homes-edition",
             "current",
         ),
