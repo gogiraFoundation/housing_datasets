@@ -150,8 +150,6 @@ def test_entry_pressure_count() -> None:
         v6a_y1=160_000,
     )
     d5a = pd.concat([d5a1, d5a2], ignore_index=True)
-    d5b = pd.concat([d5b1, d5b2], ignore_index=True)
-    d5c = pd.concat([d5c1, d5c2], ignore_index=True)
     d6a = pd.concat([d6a1, d6a2], ignore_index=True)
     assert entry_pressure_count(d5a, d6a, 2020, 2024) == 1
 

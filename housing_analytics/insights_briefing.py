@@ -216,7 +216,6 @@ def la_pe_horizon_table(
 
 def entry_pressure_count(d5a: pd.DataFrame, d6a: pd.DataFrame, y_min: int, y_max: int) -> int:
     """LAs where Δ(6a LQ price) > Δ(5a median price), same paired years."""
-    p5 = la_pe_horizon_table(d5a, d5a, d5a, y_min, y_max, None)  # wrong - need only price deltas from 5a and 6a
     # Rebuild minimal deltas for 5a median and 6a LQ only
     def delta_sheet(df: pd.DataFrame, y0: int, y1: int) -> pd.DataFrame:
         sub = df[df["pe_year"].isin([y0, y1])].copy()

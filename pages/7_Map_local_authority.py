@@ -359,7 +359,6 @@ def _render_region_lane_b_map() -> None:
     median_v = float(vm.median(skipna=True)) if vm.notna().any() else float("nan")
     mean_v = float(vm.mean(skipna=True)) if vm.notna().any() else float("nan")
     per_eff = False
-    fy = ""
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Regions (filtered)", f"{len(display):,}")
