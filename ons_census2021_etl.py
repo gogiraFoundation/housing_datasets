@@ -12,6 +12,8 @@ from typing import Any
 
 import pandas as pd
 import requests
+
+from housing_data.atomic_io import write_parquet_atomic
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -192,7 +194,7 @@ def transform_csv_to_tidy(
     csv_out = output_dir / f"{stem}.csv"
     tidy.to_csv(csv_out, index=False)
     if write_parquet:
-        tidy.to_parquet(output_dir / f"{stem}.parquet", index=False)
+        write_parquet_atomic(tidy, output_dir / f"{stem}.parquet", index=False)
     if verbose:
         print(f"Wrote {csv_out}")
         if write_parquet:
@@ -219,7 +221,7 @@ def write_la_population_2021(
     stem = POPULATION_DERIVED_STEM
     pop.to_csv(output_dir / f"{stem}.csv", index=False)
     if write_parquet:
-        pop.to_parquet(output_dir / f"{stem}.parquet", index=False)
+        write_parquet_atomic(pop, output_dir / f"{stem}.parquet", index=False)
     if verbose:
         print(f"Wrote {output_dir / f'{stem}.csv'}")
         if write_parquet:

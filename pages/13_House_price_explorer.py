@@ -34,6 +34,11 @@ def main() -> None:
     )
     st.divider()
     ogl_attribution_expander()
+    st.info(
+        "**Legacy scope:** this source is **1995–2013** LA medians and counts from a discontinued workbook. "
+        "For **current rolling-quarter medians** by LA, region, or county, use **Median price — admin geographies**. "
+        "The two products use different methods and periods."
+    )
     st.markdown(f"[Dataset page (ONS)]({DATASET_PAGE})")
 
     edition = st.sidebar.selectbox(

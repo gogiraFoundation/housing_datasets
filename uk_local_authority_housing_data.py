@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from housing_data.atomic_io import write_parquet_atomic
 from housing_data.wide_la import LA_ID_COLUMNS, clean_wide_la_housing
 
 DEFAULT_WORKBOOK = Path(__file__).resolve().parent / "UK_local_authority_housing_data.xlsx"
@@ -72,7 +73,7 @@ def run_pipeline(
 
     if write_parquet:
         tidy_parquet = output_dir / "uk_housing_starts_tidy.parquet"
-        tidy.to_parquet(tidy_parquet, index=False)
+        write_parquet_atomic(tidy, tidy_parquet, index=False)
 
     if verbose:
         print(f"Wrote {wide_csv}")

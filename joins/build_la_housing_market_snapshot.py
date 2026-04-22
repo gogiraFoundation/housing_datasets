@@ -9,15 +9,20 @@ import re
 import sys
 from pathlib import Path
 from typing import Any
-
 import pandas as pd
+
+from housing_data.atomic_io import write_parquet_atomic
 
 _REPO = Path(__file__).resolve().parents[1]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-from housing_data.median_price_la import latest_median_price_existing_la
-from housing_data.price_earnings_snapshot import price_earnings_la_median_snapshot
+from housing_data.median_price_la import latest_median_price_existing_la, latest_median_price_new_la
+from housing_data.price_earnings_snapshot import (
+    price_earnings_la_median_snapshot,
+    price_earnings_newbuild_workplace_la_median_snapshot,
+    price_earnings_residence_la_median_snapshot,
+)
 
 
 def _load_aggregate_module():
@@ -38,6 +43,56 @@ _DEFAULT_REF = _REPO / "data" / "reference"
 
 def _norm_lad(x: object) -> str:
     return str(x).strip().upper()
+
+
+def _vacant_second_homes_la_wide(
+    processed_dir: Path, edition: str
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Headline vacant + second-home counts per LAD from ONS Census 2021 table 1a (LAD rows only)."""
+    processed_dir = Path(processed_dir)
+    path = processed_dir / f"ons_vacant_second_homes_{edition}_1a_tidy.parquet"
+    if not path.is_file():
+        return pd.DataFrame(), {
+            "skipped": True,
+            "reason": "missing_parquet",
+            "path": path.name,
+        }
+    df = pd.read_parquet(path)
+    sub = df[df["geography_level"].astype(str) == "local_authority_district"].copy()
+    if sub.empty:
+        return pd.DataFrame(), {
+            "skipped": True,
+            "reason": "no_lad_rows",
+            "edition": edition,
+        }
+    sub["lad_code"] = sub["area_code"].map(_norm_lad)
+    sub["value"] = pd.to_numeric(sub["value"], errors="coerce")
+    wide = sub.pivot_table(
+        index="lad_code",
+        columns="dwelling_group",
+        values="value",
+        aggfunc="first",
+    )
+    wide = wide.rename(
+        columns={
+            "vacant": "vacant_dwellings_count",
+            "second_home": "second_home_dwellings_count",
+        }
+    )
+    out = wide.reset_index()
+    for col in ("vacant_dwellings_count", "second_home_dwellings_count"):
+        if col not in out.columns:
+            out[col] = pd.NA
+    meta = {
+        "skipped": False,
+        "edition": edition,
+        "source_table": "1a",
+        "caveat": (
+            "ONS Census 2021 headline counts (table 1a), local authority district geography — "
+            "not a rate; no denominator joined here."
+        ),
+    }
+    return out[["lad_code", "vacant_dwellings_count", "second_home_dwellings_count"]], meta
 
 
 def _safe_col(s: str) -> str:
@@ -127,6 +182,66 @@ def _hpi_england_wide(hpi: pd.DataFrame) -> pd.DataFrame:
     return pv.reset_index()
 
 
+def _canonical_geo(name: object) -> str:
+    s = str(name).strip()
+    mapping = {
+        "East": "East of England",
+        "Northern Ireland [note 3]": "Northern Ireland",
+    }
+    return mapping.get(s, s)
+
+
+def _region_hpi_prpi_growth(processed_dir: Path, *, hpi_edition: str, prpi_edition: str) -> pd.DataFrame:
+    hpi_path = processed_dir / f"ons_uk_hpi_monthly_{hpi_edition}_1_tidy.parquet"
+    prpi_path = processed_dir / f"ons_private_rental_index_{prpi_edition}_tidy.parquet"
+    if not hpi_path.is_file() or not prpi_path.is_file():
+        return pd.DataFrame(
+            columns=[
+                "region_name",
+                "hpi_growth_overlap_pct",
+                "prpi_growth_overlap_pct",
+                "hpi_minus_prpi_growth_pp",
+            ]
+        )
+
+    hpi = pd.read_parquet(hpi_path).copy()
+    hpi["period"] = pd.to_datetime(hpi["time_period"].astype(str), format="%b %Y", errors="coerce")
+    hpi["value"] = pd.to_numeric(hpi["value"], errors="coerce")
+    hpi["region_name"] = hpi["geography"].map(_canonical_geo)
+    hpi = hpi.dropna(subset=["period", "value", "region_name"])[["region_name", "period", "value"]]
+    hpi = hpi.rename(columns={"value": "hpi_index"})
+
+    prpi = pd.read_parquet(prpi_path)
+    prpi = prpi[prpi["variable"].astype(str) == "index"].copy()
+    prpi["period"] = pd.to_datetime(prpi["month_label"].astype(str), format="%b-%y", errors="coerce")
+    prpi["value"] = pd.to_numeric(prpi["value"], errors="coerce")
+    prpi["region_name"] = prpi["geography_name"].map(_canonical_geo)
+    prpi = prpi.dropna(subset=["period", "value", "region_name"])[["region_name", "period", "value"]]
+    prpi = prpi.rename(columns={"value": "prpi_index"})
+
+    joined = hpi.merge(prpi, on=["region_name", "period"], how="inner")
+    rows: list[dict[str, Any]] = []
+    for geo, sub in joined.groupby("region_name", observed=True):
+        sub = sub.sort_values("period")
+        if len(sub) < 2:
+            continue
+        first = sub.iloc[0]
+        last = sub.iloc[-1]
+        if float(first["hpi_index"]) == 0 or float(first["prpi_index"]) == 0:
+            continue
+        hpi_growth = (float(last["hpi_index"]) / float(first["hpi_index"]) - 1.0) * 100.0
+        prpi_growth = (float(last["prpi_index"]) / float(first["prpi_index"]) - 1.0) * 100.0
+        rows.append(
+            {
+                "region_name": geo,
+                "hpi_growth_overlap_pct": hpi_growth,
+                "prpi_growth_overlap_pct": prpi_growth,
+                "hpi_minus_prpi_growth_pp": hpi_growth - prpi_growth,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def region_population_by_region(
     processed_dir: Path,
     *,
@@ -177,6 +292,10 @@ def build_lane_a(
     ref_csv: Path | None = None,
     price_earnings_edition: str | None = None,
     skip_price_earnings: bool = False,
+    median_new_admin_edition: str | None = None,
+    price_residence_earnings_edition: str | None = None,
+    price_newbuild_workplace_edition: str | None = None,
+    vacant_second_homes_edition: str | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     processed_dir = Path(processed_dir)
     hb_path = processed_dir / f"ons_housebuilding_la_{housebuilding_edition}_tidy.parquet"
@@ -239,6 +358,49 @@ def build_lane_a(
         if not pe_rows.empty:
             out = out.merge(pe_rows, on="lad_code", how="left")
 
+    median_new_meta: dict[str, Any] = {"skipped": True}
+    if median_new_admin_edition:
+        med_new_path = processed_dir / f"ons_median_price_new_admin_{median_new_admin_edition}_2a_tidy.parquet"
+        if med_new_path.is_file():
+            med_new = pd.read_parquet(med_new_path)
+            new_rows, new_pl = latest_median_price_new_la(med_new)
+            median_new_meta = {
+                "skipped": False,
+                "median_new_admin_edition": median_new_admin_edition,
+                "median_price_new_period_label": new_pl,
+            }
+            if not new_rows.empty:
+                new_only = new_rows.rename(
+                    columns={"value": "median_price_new_gbp", "period_label": "median_price_new_period_label"}
+                )[["lad_code", "median_price_new_gbp", "median_price_new_period_label"]]
+                out = out.merge(new_only, on="lad_code", how="left")
+        else:
+            median_new_meta = {"skipped": True, "reason": "missing_parquet", "path": str(med_new_path.name)}
+
+    pe_res_meta: dict[str, Any] = {"skipped": True}
+    if price_residence_earnings_edition:
+        res_rows, pe_res_meta = price_earnings_residence_la_median_snapshot(
+            processed_dir, price_residence_earnings_edition
+        )
+        if not res_rows.empty and not pe_res_meta.get("skipped"):
+            out = out.merge(res_rows, on="lad_code", how="left")
+
+    pe_nb_meta: dict[str, Any] = {"skipped": True}
+    if price_newbuild_workplace_edition:
+        nb_rows, pe_nb_meta = price_earnings_newbuild_workplace_la_median_snapshot(
+            processed_dir, price_newbuild_workplace_edition
+        )
+        if not nb_rows.empty and not pe_nb_meta.get("skipped"):
+            out = out.merge(nb_rows, on="lad_code", how="left")
+
+    vacant_meta: dict[str, Any] = {"skipped": True}
+    if vacant_second_homes_edition:
+        vac_wide, vacant_meta = _vacant_second_homes_la_wide(
+            processed_dir, vacant_second_homes_edition
+        )
+        if not vac_wide.empty and not vacant_meta.get("skipped"):
+            out = out.merge(vac_wide, on="lad_code", how="left")
+
     meta = {
         "lane": "A_local_authority",
         "housebuilding_edition": housebuilding_edition,
@@ -248,13 +410,20 @@ def build_lane_a(
         "supply_financial_year": latest_fy,
         "median_price_period_label": med_pl,
         "price_earnings": pe_extra,
+        "median_new_build": median_new_meta,
+        "price_earnings_residence": pe_res_meta,
+        "price_earnings_newbuild_workplace": pe_nb_meta,
+        "vacant_second_homes": vacant_meta,
         "caveat": (
             "Main fuel is a snapshot for the workbook reference period; supply is by financial year. "
             "Population is Census 2021 (England & Wales LAs) where present. "
-            "Median price is from HPSSA existing admin table 2a (all dwelling types), latest rolling year in file. "
+            "Median price (existing) is from HPSSA existing admin table 2a (all dwelling types), latest rolling year in file; "
+            "optional median new-build uses the new-dwellings admin 2a file when present (also rolling-year). "
             "HPI sheet 8 (optional) is England LA snapshot only. "
-            "Price/earnings columns (when present) use the latest calendar year common to ONS tables 5a–5c; "
-            "see price_earnings.caveat in this metadata."
+            "Workplace price/earnings columns (when present) use the latest calendar year common to ONS tables 5a–5c; "
+            "optional residence-based and new-build workplace families use the same common-year rule on their own 5a–5c tables. "
+            "Optional vacant/second-home headline counts (Census 2021 table 1a) are counts only — see vacant_second_homes in metadata. "
+            "See price_earnings.* and related keys in this metadata."
         ),
     }
     return out, meta
@@ -267,6 +436,8 @@ def build_lane_b(
     mainfuel_edition: str,
     epc_edition: str,
     ee_edition: str,
+    uk_hpi_edition: str = "march2026",
+    prpi_edition: str = "v41",
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     from ons_housebuilding_country_periods import preferred_period_order
 
@@ -331,6 +502,9 @@ def build_lane_b(
 
     out = out.merge(ee_last, left_on="region_code", right_on="region_code_ee", how="left")
     out = out.drop(columns=["region_code_ee"], errors="ignore")
+    overlap_growth = _region_hpi_prpi_growth(processed_dir, hpi_edition=uk_hpi_edition, prpi_edition=prpi_edition)
+    if not overlap_growth.empty:
+        out = out.merge(overlap_growth, on="region_name", how="left")
 
     rp, rp_meta = region_population_by_region(processed_dir, mainfuel_edition=mainfuel_edition)
     if not rp.empty:
@@ -345,6 +519,8 @@ def build_lane_b(
         "mainfuel_edition": mainfuel_edition,
         "epc_edition": epc_edition,
         "ee_fiveyear_edition": ee_edition,
+        "uk_hpi_edition": uk_hpi_edition,
+        "prpi_edition": prpi_edition,
         "supply_financial_year": latest_fy,
         "ee_rolling_period": latest_rp,
         "region_population": rp_meta,
@@ -379,6 +555,27 @@ def main() -> None:
     p.add_argument("--skip-price-earnings", action="store_true", help="Do not join price/earnings tables.")
     p.add_argument("--epc-edition", default="march2025")
     p.add_argument("--ee-edition", default="march2025")
+    p.add_argument("--prpi-edition", default="v41")
+    p.add_argument(
+        "--median-new-admin-edition",
+        default="yearendingseptember2025",
+        help="Edition for ons_median_price_new_admin_* table 2a (empty = skip new-build median join).",
+    )
+    p.add_argument(
+        "--price-residence-earnings-edition",
+        default="",
+        help="Edition for ons_price_residence_earnings_ratio_* 5a–5c (empty = skip).",
+    )
+    p.add_argument(
+        "--price-newbuild-workplace-edition",
+        default="",
+        help="Edition for ons_price_newbuild_workplace_earnings_ratio_* 5a–5c (empty = skip).",
+    )
+    p.add_argument(
+        "--vacant-second-homes-edition",
+        default="",
+        help="Edition for ons_vacant_second_homes_*_1a headline LAD counts (empty = skip).",
+    )
     p.add_argument("--la-stem", default="joined_la_housing_market_snapshot")
     p.add_argument("--region-stem", default="region_housing_market_snapshot")
     p.add_argument(
@@ -398,6 +595,10 @@ def main() -> None:
     if not args.skip_price_earnings and str(args.price_earnings_edition).strip() not in ("", "none", "None"):
         pe_ed = str(args.price_earnings_edition).strip()
 
+    def _opt_ed(s: str) -> str | None:
+        t = str(s).strip()
+        return None if t in ("", "none", "None") else t
+
     la_df, la_meta = build_lane_a(
         out_dir,
         housebuilding_edition=args.housebuilding_edition,
@@ -407,14 +608,21 @@ def main() -> None:
         ref_csv=args.lad_lookup_csv if args.lad_lookup_csv.is_file() else None,
         price_earnings_edition=pe_ed,
         skip_price_earnings=args.skip_price_earnings,
+        median_new_admin_edition=_opt_ed(args.median_new_admin_edition),
+        price_residence_earnings_edition=_opt_ed(args.price_residence_earnings_edition),
+        price_newbuild_workplace_edition=_opt_ed(args.price_newbuild_workplace_edition),
+        vacant_second_homes_edition=_opt_ed(args.vacant_second_homes_edition),
     )
 
+    hpi_overlap_ed = hpi_ed if hpi_ed else "march2026"
     reg_df, reg_meta = build_lane_b(
         out_dir,
         housebuilding_edition=args.housebuilding_edition,
         mainfuel_edition=args.mainfuel_edition,
         epc_edition=args.epc_edition,
         ee_edition=args.ee_edition,
+        uk_hpi_edition=hpi_overlap_ed,
+        prpi_edition=args.prpi_edition,
     )
 
     la_pq = out_dir / f"{args.la_stem}.parquet"
@@ -422,11 +630,11 @@ def main() -> None:
     reg_pq = out_dir / f"{args.region_stem}.parquet"
     reg_meta_path = out_dir / f"{args.region_stem}.meta.json"
 
-    la_df.to_parquet(la_pq, index=False)
+    write_parquet_atomic(la_df, la_pq, index=False)
     combined_la = {**la_meta, "output_path": str(la_pq.resolve().relative_to(repo_root))}
     la_meta_path.write_text(json.dumps(combined_la, indent=2), encoding="utf-8")
 
-    reg_df.to_parquet(reg_pq, index=False)
+    write_parquet_atomic(reg_df, reg_pq, index=False)
     combined_reg = {**reg_meta, "output_path": str(reg_pq.resolve().relative_to(repo_root))}
     reg_meta_path.write_text(json.dumps(combined_reg, indent=2), encoding="utf-8")
 

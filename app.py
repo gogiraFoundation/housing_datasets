@@ -49,16 +49,19 @@ st.markdown(
 | **Main fuel / central heating** | ONS **main fuel** tables (1a–3b) for England and Wales. |
 | **UK HPI — monthly** | ONS **UK House Price Index** monthly workbook (indices, prices, LA snapshots). |
 | **House price per m² / room** | ONS **England and Wales** price per square metre and per room (**2004–2016** annual series). |
-| **Median price — admin geographies** | ONS **median price paid** (existing or **new build**) by region, LA, county, or combined authority — rolling annual quarters. |
+| **Median price — admin geographies** | ONS **median price paid** (**all**, existing, or **new build**) by region, LA, county, or combined authority — rolling annual quarters. |
 | **House Price Explorer** | Legacy ONS workbook (**1995–2013**) — LA median prices and sale counts. |
 | **Price / earnings ratio** | ONS **house price to workplace-based earnings** (median and lower quartile; country, county, LA). |
+| **Price / residence earnings** | ONS **house price to residence-based earnings** (median and lower quartile; same tables as workplace series). |
+| **New build / workplace earnings** | ONS **newly built dwelling** prices vs **workplace-based** earnings (median / LQ; tables **1a–6c**). |
+| **National parks — sales & prices** | ONS **HPSSA by national park**: sales volumes, **median** and **lower quartile** price paid by property type (rolling quarters). |
 | **Housing market comparator** | **Lane A** (LA): supply, Census population, median price, optional **price/earnings 5a–5c**, fuel, optional HPI · **Lane B** (region): aggregated supply, EPC, rolling EPC C+, **Census population by region** (`joins/build_la_housing_market_snapshot.py`). |
 | **LA clustering** | **K-means** or **hierarchical** clusters on scaled Lane A indicators (PCA scatter); exploratory grouping, not a forecast. |
 | **ML predictions & backtests** | **`run_ts_forecast.py`** (monthly or annual UK HPI), **`sweep_hpi_short_horizons.py`**, **`sweep_hpi_geographies.py`** (all sheet-1 areas), **Forward index change** tab (defaults models from `ts_backtest` JSON when matched), **`export_hpi_forward_forecast.py`** (JSON export), and **`run_la_benchmark.py`** residuals + CV table (`data/processed/`). |
 
 The ONS **main fuel / central heating** workbook is transformed by `ons_mainfuel_etl.py` (see **Main fuel** page) and can be **joined** to LA house building (`joins/build_joined_la_housebuilding_mainfuel.py`). **Fuel mix** also appears under **Energy efficiency — five-year rolling** (tables 3a–3h).
 
-**House prices:** `ons_uk_hpi_monthly_etl.py`, `ons_house_m2_room_etl.py`, `ons_median_price_admin_etl.py` (existing/new dwellings), `ons_price_earnings_ratio_etl.py` (affordability ratios), and `ons_house_price_explorer_etl.py` write tidy Parquet under `data/processed/` (see **README.md**).
+**House prices:** `ons_uk_hpi_monthly_etl.py`, `ons_house_m2_room_etl.py`, `ons_median_price_admin_etl.py` (all/existing/new dwellings), `ons_national_park_hpssa_etl.py` (national park sales and prices), `ons_price_earnings_ratio_etl.py`, `ons_price_newbuild_workplace_earnings_ratio_etl.py` (new build vs workplace earnings), and `ons_price_residence_earnings_ratio_etl.py` (residence-based affordability), `ons_house_price_explorer_etl.py`, and `ons_private_rental_index_etl.py` (experimental private **rental price index** and YoY % from CSV) write tidy Parquet under `data/processed/` (see **README.md**).
 
 **Reference:** `joins/README.md` (clean join rules; `joins/build_la_housing_market_snapshot.py` for two-lane snapshots), `scripts/build_processed_manifest.py` (catalogue of processed files), `ons_median_eescore_etl.py` (median EPC score workbook).
 """

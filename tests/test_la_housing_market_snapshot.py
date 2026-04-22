@@ -181,6 +181,24 @@ def test_region_population_by_region_sums(tmp_path: Path) -> None:
     assert int(df["region_population_year"].iloc[0]) == 2021
 
 
+def _minimal_median_new_2a(tmp: Path) -> None:
+    df = pd.DataFrame(
+        {
+            "table_id": ["2a", "2a"],
+            "dwelling_class": ["new", "new"],
+            "geography_level": ["local_authority", "local_authority"],
+            "property_band": ["all", "all"],
+            "region_country_code": ["E12000001", "E12000001"],
+            "region_country_name": ["NE", "NE"],
+            "local_authority_code": ["E06000001", "E06000001"],
+            "local_authority_name": ["Hartlepool", "Hartlepool"],
+            "period_label": ["Year ending Sep 2024", "Year ending Sep 2025"],
+            "median_price_gbp": [120000.0, 130000.0],
+        }
+    )
+    df.to_parquet(tmp / "ons_median_price_new_admin_testmednew_2a_tidy.parquet", index=False)
+
+
 def test_build_lane_a_price_earnings_merge(tmp_path: Path) -> None:
     import sys
 
@@ -209,6 +227,79 @@ def test_build_lane_a_price_earnings_merge(tmp_path: Path) -> None:
     assert row["pe_affordability_ratio"] == 5.0
     assert int(row["pe_snapshot_year"]) == 2025
     assert meta["price_earnings"]["pe_snapshot_year"] == 2025
+
+
+def _minimal_vacant_1a(tmp: Path) -> None:
+    df = pd.DataFrame(
+        {
+            "table_id": ["1a", "1a"],
+            "geography_level": ["local_authority_district", "local_authority_district"],
+            "area_code": ["E06000001", "E06000001"],
+            "area_name": ["Hartlepool", "Hartlepool"],
+            "dwelling_group": ["vacant", "second_home"],
+            "breakdown_type": [pd.NA, pd.NA],
+            "breakdown_label": [pd.NA, pd.NA],
+            "value": [500, 120],
+        }
+    )
+    df.to_parquet(tmp / "ons_vacant_second_homes_current_1a_tidy.parquet", index=False)
+
+
+def test_build_lane_a_vacant_second_homes_merge(tmp_path: Path) -> None:
+    import sys
+
+    if str(_REPO) not in sys.path:
+        sys.path.insert(0, str(_REPO))
+
+    from joins.build_la_housing_market_snapshot import build_lane_a
+
+    _minimal_hb(tmp_path)
+    _minimal_mf2a2b(tmp_path)
+    _minimal_median_2a(tmp_path)
+    _minimal_vacant_1a(tmp_path)
+
+    la, meta = build_lane_a(
+        tmp_path,
+        housebuilding_edition="testhb",
+        mainfuel_edition="testmf",
+        median_existing_edition="testmed",
+        uk_hpi_edition=None,
+        ref_csv=None,
+        vacant_second_homes_edition="current",
+    )
+    row = la[la["lad_code"] == "E06000001"].iloc[0]
+    assert int(row["vacant_dwellings_count"]) == 500
+    assert int(row["second_home_dwellings_count"]) == 120
+    assert meta["vacant_second_homes"]["skipped"] is False
+
+
+def test_build_lane_a_optional_median_new(tmp_path: Path) -> None:
+    import sys
+
+    if str(_REPO) not in sys.path:
+        sys.path.insert(0, str(_REPO))
+
+    from joins.build_la_housing_market_snapshot import build_lane_a
+
+    _minimal_hb(tmp_path)
+    _minimal_mf2a2b(tmp_path)
+    _minimal_median_2a(tmp_path)
+    _minimal_median_new_2a(tmp_path)
+    _minimal_pe_5abc(tmp_path, edition="testpe")
+
+    la, meta = build_lane_a(
+        tmp_path,
+        housebuilding_edition="testhb",
+        mainfuel_edition="testmf",
+        median_existing_edition="testmed",
+        uk_hpi_edition=None,
+        ref_csv=None,
+        price_earnings_edition="testpe",
+        median_new_admin_edition="testmednew",
+    )
+    row = la[la["lad_code"] == "E06000001"].iloc[0]
+    assert row["median_price_new_gbp"] == 130000.0
+    assert meta["median_new_build"]["skipped"] is False
 
 
 def test_build_lane_b_smoke(tmp_path: Path) -> None:

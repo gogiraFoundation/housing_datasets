@@ -7,6 +7,9 @@
 #   ./start.sh --app-only              # same as SKIP_ETL=1
 #   ./start.sh --monitor               # same as USE_RUN_DASHBOARD=1
 #   SKIP_GEO=1 ./start.sh              # do not fetch LAD GeoJSON even if missing (air-gapped / custom file)
+#   ETL_PROFILE=full ./start.sh        # standard ETL + Census TS008 + processed_manifest (see scripts/run_etl_suite.py)
+#   ETL_WITH_JOINS=1 ./start.sh        # append join builders after the suite (needs prior outputs)
+#   ETL_CONTINUE_ON_ERROR=1 ./start.sh # run all suite steps even if one fails
 
 set -euo pipefail
 
@@ -37,19 +40,15 @@ if [[ "${USE_RUN_DASHBOARD:-0}" == "1" ]]; then
 fi
 
 if [[ "$skip_etl" -eq 0 ]]; then
-  echo "[start] running pipelines with: $PYTHON"
-  "$PYTHON" uk_local_authority_housing_data.py
-  "$PYTHON" ons_epc_etl.py --edition march2025
-  "$PYTHON" ons_ee_fiveyear_etl.py --edition march2025
-  "$PYTHON" ons_housebuilding_la_etl.py --edition fye_march2025
-  "$PYTHON" ons_housebuilding_country_etl.py --edition current
-  "$PYTHON" ons_mainfuel_etl.py --edition march2025
-  "$PYTHON" ons_uk_hpi_monthly_etl.py --edition march2026
-  "$PYTHON" ons_house_m2_room_etl.py --edition 2004to2016
-  "$PYTHON" ons_median_price_admin_etl.py --dataset existing --edition yearendingseptember2025
-  "$PYTHON" ons_median_price_admin_etl.py --dataset new --edition yearendingseptember2025
-  "$PYTHON" ons_price_earnings_ratio_etl.py --edition current
-  "$PYTHON" ons_house_price_explorer_etl.py --edition current
+  echo "[start] running pipelines with: $PYTHON (see scripts/run_etl_suite.py)"
+  ETL_ARGS=(--profile "${ETL_PROFILE:-standard}")
+  if [[ "${ETL_WITH_JOINS:-0}" == "1" ]]; then
+    ETL_ARGS+=(--with-joins)
+  fi
+  if [[ "${ETL_CONTINUE_ON_ERROR:-0}" == "1" ]]; then
+    ETL_ARGS+=(--continue-on-error)
+  fi
+  "$PYTHON" scripts/run_etl_suite.py "${ETL_ARGS[@]}"
   echo "[start] ETL finished; starting dashboard"
 else
   echo "[start] SKIP_ETL=1 / --app-only: skipping pipelines"

@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from housing_data.atomic_io import write_parquet_atomic
+
 _REPO = Path(__file__).resolve().parents[1]
 _DEFAULT_PROCESSED = _REPO / "data" / "processed"
 
@@ -129,7 +131,7 @@ def main() -> None:
     pq = out_dir / f"{stem}.parquet"
     meta_path = out_dir / f"{stem}.meta.json"
 
-    merged.to_parquet(pq, index=False)
+    write_parquet_atomic(merged, pq, index=False)
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
     print(f"Wrote {pq}")
     print(f"Wrote {meta_path}")

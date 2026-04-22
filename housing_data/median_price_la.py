@@ -36,3 +36,34 @@ def latest_median_price_existing_la(med: pd.DataFrame) -> tuple[pd.DataFrame, st
         }
     )
     return out, pl
+
+
+def latest_median_price_new_la(med: pd.DataFrame) -> tuple[pd.DataFrame, str | None]:
+    """Latest rolling-period median price (new build) per LA from HPSSA-style tidy (table 2a, all types)."""
+    m = med[
+        (med["table_id"].astype(str) == "2a")
+        & (med["property_band"].astype(str) == "all")
+        & (med["geography_level"].astype(str) == "local_authority")
+    ].copy()
+    if m.empty:
+        return pd.DataFrame(), None
+    m["period_sort"] = pd.to_datetime(
+        m["period_label"].astype(str).str.replace("^Year ending ", "", regex=True),
+        format="%b %Y",
+        errors="coerce",
+    )
+    latest = m["period_sort"].max()
+    if pd.isna(latest):
+        return pd.DataFrame(), None
+    last = m[m["period_sort"] == latest].copy()
+    last["lad_code"] = last["local_authority_code"].map(norm_lad)
+    pl = str(last["period_label"].iloc[0])
+    out = pd.DataFrame(
+        {
+            "lad_code": last["lad_code"],
+            "la_name": last["local_authority_name"].astype(str),
+            "value": pd.to_numeric(last["median_price_gbp"], errors="coerce"),
+            "period_label": last["period_label"].astype(str),
+        }
+    )
+    return out, pl

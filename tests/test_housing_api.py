@@ -226,7 +226,9 @@ def test_metrics_require_key_401_without_credentials(monkeypatch: pytest.MonkeyP
     assert r.status_code == 401
 
 
-def test_metrics_require_key_ok_with_bearer(monkeypatch: pytest.MonkeyPatch, tmp_repo: Path, api_key: str) -> None:
+def test_metrics_require_key_ok_with_bearer(
+    monkeypatch: pytest.MonkeyPatch, tmp_repo: Path, api_key: str
+) -> None:
     monkeypatch.setenv("HOUSING_API_KEYS", api_key)
     monkeypatch.setenv("HOUSING_REPO_ROOT", str(tmp_repo))
     monkeypatch.setenv("HOUSING_API_ENABLE_METRICS", "1")
@@ -238,3 +240,91 @@ def test_metrics_require_key_ok_with_bearer(monkeypatch: pytest.MonkeyPatch, tmp
     r = c.get("/metrics", headers={"Authorization": f"Bearer {api_key}"})
     assert r.status_code == 200
     assert "http_requests_total" in r.text
+
+
+def test_api_keys_from_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    key_path = tmp_path / "keys.txt"
+    key_path.write_text("file-based-secret-key\n", encoding="utf-8")
+    monkeypatch.delenv("HOUSING_API_KEYS", raising=False)
+    monkeypatch.setenv("HOUSING_API_KEYS_FILE", str(key_path))
+    monkeypatch.setenv("HOUSING_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("HOUSING_API_DOCS", "0")
+    monkeypatch.setenv("HOUSING_API_ENABLE_METRICS", "0")
+    proc = tmp_path / "data" / "processed"
+    proc.mkdir(parents=True)
+    pd.DataFrame({"a": [1]}).to_parquet(proc / "ons_housebuilding_la_fye_march2025_tidy.parquet", index=False)
+    from housing_api.app import create_app
+
+    c = TestClient(create_app())
+    r = c.get(f"{API_PREFIX}/datasets", headers={"Authorization": "Bearer file-based-secret-key"})
+    assert r.status_code == 200
+
+
+def test_production_env_disables_docs(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOUSING_API_ENV", "production")
+    monkeypatch.delenv("HOUSING_API_DOCS", raising=False)
+    from housing_api import settings
+
+    assert settings.enable_docs() is False
+    monkeypatch.setenv("HOUSING_API_DOCS", "1")
+    assert settings.enable_docs() is True
+
+
+def test_generic_large_table_guard(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, api_key: str) -> None:
+    monkeypatch.setenv("HOUSING_API_KEYS", api_key)
+    monkeypatch.setenv("HOUSING_REPO_ROOT", str(tmp_path))
+    monkeypatch.setenv("HOUSING_API_DOCS", "0")
+    monkeypatch.setenv("HOUSING_API_ENABLE_METRICS", "0")
+    monkeypatch.setenv("HOUSING_API_MAX_ROWS_WITHOUT_FILTERS", "2")
+    monkeypatch.setenv("HOUSING_API_USE_DUCKDB", "0")
+    proc = tmp_path / "data" / "processed"
+    proc.mkdir(parents=True)
+    pd.DataFrame({"x": range(5)}).to_parquet(proc / "uk_housing_starts_tidy.parquet", index=False)
+    from housing_api.app import create_app
+
+    c = TestClient(create_app())
+    h = {"Authorization": f"Bearer {api_key}"}
+    r = c.get(f"{API_PREFIX}/datasets/uk_housing_starts", headers=h)
+    assert r.status_code == 400
+    r2 = c.get(f"{API_PREFIX}/datasets/uk_housing_starts?columns=x", headers=h)
+    assert r2.status_code == 200
+    assert r2.json()["total_rows"] == 5
+
+
+def test_columns_not_allowed_for_housebuilding_la(client: TestClient) -> None:
+    r = client.get(
+        f"{API_PREFIX}/datasets/ons_housebuilding_la_fye_march2025?columns=financial_year",
+        headers={"Authorization": "Bearer pytest-api-key-rotated"},
+    )
+    assert r.status_code == 400
+
+
+def test_api_keys_secret_id_uses_loader(monkeypatch: pytest.MonkeyPatch) -> None:
+    import housing_api.settings as api_settings
+
+    monkeypatch.delenv("HOUSING_API_KEYS", raising=False)
+    monkeypatch.delenv("HOUSING_API_KEYS_FILE", raising=False)
+    monkeypatch.setenv("HOUSING_API_KEYS_SECRET_ID", "dummy-arn")
+
+    def _fake(sid: str) -> list[str]:
+        assert sid == "dummy-arn"
+        return ["from-secret"]
+
+    monkeypatch.setattr(api_settings, "_load_keys_from_aws_secret", _fake)
+    assert api_settings.api_keys() == ["from-secret"]
+
+
+def test_export_json_default_limit_respects_cap(monkeypatch: pytest.MonkeyPatch, tmp_repo: Path, api_key: str) -> None:
+    monkeypatch.setenv("HOUSING_API_KEYS", api_key)
+    monkeypatch.setenv("HOUSING_REPO_ROOT", str(tmp_repo))
+    monkeypatch.setenv("HOUSING_API_DOCS", "0")
+    monkeypatch.setenv("HOUSING_API_ENABLE_METRICS", "0")
+    monkeypatch.setenv("HOUSING_API_MAX_EXPORT_JSON_ROWS", "2")
+    from housing_api.app import create_app
+
+    c = TestClient(create_app())
+    r = c.get(
+        f"{API_PREFIX}/datasets/ons_housebuilding_la_fye_march2025/export?format=json&limit=10",
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    assert r.status_code == 422

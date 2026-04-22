@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from housing_data.atomic_io import write_parquet_atomic
 from ons_epc_config import EpcEdition
 from ons_epc_etl import download_edition
 from ons_mainfuel_config import (
@@ -249,7 +250,7 @@ def transform_workbook(
         tidy.to_csv(csv_path, index=False)
         pq_path = output_dir / f"{stem}.parquet"
         if write_parquet:
-            tidy.to_parquet(pq_path, index=False)
+            write_parquet_atomic(tidy, pq_path, index=False)
         results[sheet] = tidy
         if verbose:
             print(f"Wrote {csv_path}")

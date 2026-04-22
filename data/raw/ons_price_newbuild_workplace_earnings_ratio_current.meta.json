@@ -1,0 +1,11 @@
+{
+  "source_url": "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/housing/datasets/housepricenewlybuiltdwellingstoworkplacebasedearningsratio/current/aff3ratioofhousepricenewlybuilttoworkplacebasedearnings.xlsx",
+  "dataset_page_url": "https://www.ons.gov.uk/peoplepopulationandcommunity/housing/datasets/housepricenewlybuiltdwellingstoworkplacebasedearningsratio",
+  "edition_key": "current",
+  "edition_label": "Current edition",
+  "downloaded_at": "2026-04-21T22:58:17Z",
+  "sha256": "b82cf33549c40dfd28d767c711c9ce1a025827078cf4eec543b469c7a69d3f1b",
+  "bytes": 532258,
+  "file_name": "ons_price_newbuild_workplace_earnings_ratio_current.xlsx",
+  "attribution": "Contains public sector information licensed under the Open Government Licence v3.0. Source: Office for National Statistics."
+}

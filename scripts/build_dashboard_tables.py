@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from housing_data.atomic_io import write_parquet_atomic
 from ons_housebuilding_country_periods import preferred_period_order
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -52,7 +53,7 @@ def main() -> None:
         print("No country snapshot produced (missing Parquet or no annual FY rows).")
         return
     out = processed / f"dashboard_country_latest_fy_{args.edition}.parquet"
-    snap.to_parquet(out, index=False)
+    write_parquet_atomic(snap, out, index=False)
     print(f"Wrote {out} ({len(snap)} rows)")
 
 

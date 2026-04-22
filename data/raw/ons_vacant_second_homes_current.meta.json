@@ -1,0 +1,11 @@
+{
+  "source_url": "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/housing/datasets/numberofvacantdwellingsandsecondhomeswithnousualresidents/current/numberofvacantdwellingsandsecondhomes.xlsx",
+  "dataset_page_url": "https://www.ons.gov.uk/peoplepopulationandcommunity/housing/datasets/numberofvacantdwellingsandsecondhomeswithnousualresidents",
+  "edition_key": "current",
+  "edition_label": "Current edition (released 27 October 2023)",
+  "downloaded_at": "2026-04-21T22:58:13Z",
+  "sha256": "a7a1c700ed69afc7db05b98788c977989ecf35f3d155bc236341ad562f7234e3",
+  "bytes": 1635652,
+  "file_name": "ons_vacant_second_homes_current.xlsx",
+  "attribution": "Contains public sector information licensed under the Open Government Licence v3.0. Source: Office for National Statistics."
+}

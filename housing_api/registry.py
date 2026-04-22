@@ -18,12 +18,23 @@ from ons_house_price_explorer_config import (
 from ons_mainfuel_config import MAINFUEL_DATA_SHEETS, MAINFUEL_EDITIONS
 from ons_median_eescore_config import MEDIAN_EESCORE_DATA_SHEETS, MEDIAN_EESCORE_EDITIONS
 from ons_median_price_admin_config import (
+    MEDIAN_PRICE_ALL_ADMIN_EDITIONS,
     MEDIAN_PRICE_ADMIN_DATA_SHEETS,
     MEDIAN_PRICE_EXISTING_ADMIN_EDITIONS,
     MEDIAN_PRICE_NEW_ADMIN_EDITIONS,
 )
+from ons_national_park_hpssa_config import NATIONAL_PARK_HPSSA_DATA_SHEETS, NATIONAL_PARK_HPSSA_EDITIONS
 from ons_price_earnings_ratio_config import PRICE_EARNINGS_RATIO_DATA_SHEETS, PRICE_EARNINGS_RATIO_EDITIONS
+from ons_price_newbuild_workplace_earnings_ratio_config import (
+    NEWBUILD_WORKPLACE_PRICE_EARNINGS_EDITIONS,
+)
+from ons_price_residence_earnings_ratio_config import (
+    PRICE_RESIDENCE_EARNINGS_RATIO_DATA_SHEETS,
+    PRICE_RESIDENCE_EARNINGS_RATIO_EDITIONS,
+)
+from ons_private_rental_index_config import PRIVATE_RENTAL_INDEX_EDITIONS
 from ons_uk_hpi_monthly_config import UK_HPI_DATA_SHEETS, UK_HPI_MONTHLY_EDITIONS
+from ons_vacant_second_homes_config import VACANT_SECOND_HOMES_DATA_SHEETS, VACANT_SECOND_HOMES_EDITIONS
 
 
 @dataclass(frozen=True)
@@ -168,6 +179,18 @@ def build_registry() -> dict[str, DatasetMeta]:
                 filename=fn,
             )
 
+    for ed in MEDIAN_PRICE_ALL_ADMIN_EDITIONS:
+        for sheet in MEDIAN_PRICE_ADMIN_DATA_SHEETS:
+            stem = f"ons_median_price_all_admin_{ed}_{sheet}"
+            fn = _tid(stem)
+            rid = fn.replace("_tidy.parquet", "")
+            reg[rid] = DatasetMeta(
+                id=rid,
+                title=f"ONS median price (all dwellings) {sheet} ({MEDIAN_PRICE_ALL_ADMIN_EDITIONS[ed].label})",
+                family="generic",
+                filename=fn,
+            )
+
     for ed in MEDIAN_PRICE_NEW_ADMIN_EDITIONS:
         for sheet in MEDIAN_PRICE_ADMIN_DATA_SHEETS:
             stem = f"ons_median_price_new_admin_{ed}_{sheet}"
@@ -192,6 +215,52 @@ def build_registry() -> dict[str, DatasetMeta]:
                 filename=fn,
             )
 
+    for ed in PRICE_RESIDENCE_EARNINGS_RATIO_EDITIONS:
+        for sheet in PRICE_RESIDENCE_EARNINGS_RATIO_DATA_SHEETS:
+            stem = f"ons_price_residence_earnings_ratio_{ed}_{sheet}"
+            fn = _tid(stem)
+            rid = fn.replace("_tidy.parquet", "")
+            reg[rid] = DatasetMeta(
+                id=rid,
+                title=f"ONS price / residence earnings {sheet} ({PRICE_RESIDENCE_EARNINGS_RATIO_EDITIONS[ed].label})",
+                family="generic",
+                filename=fn,
+            )
+
+    for ed in NEWBUILD_WORKPLACE_PRICE_EARNINGS_EDITIONS:
+        for sheet in PRICE_EARNINGS_RATIO_DATA_SHEETS:
+            stem = f"ons_price_newbuild_workplace_earnings_ratio_{ed}_{sheet}"
+            fn = _tid(stem)
+            rid = fn.replace("_tidy.parquet", "")
+            reg[rid] = DatasetMeta(
+                id=rid,
+                title=f"ONS new-build price / workplace earnings {sheet} ({NEWBUILD_WORKPLACE_PRICE_EARNINGS_EDITIONS[ed].label})",
+                family="generic",
+                filename=fn,
+            )
+
+    for ed in PRIVATE_RENTAL_INDEX_EDITIONS:
+        fn = _tid(f"ons_private_rental_index_{ed}")
+        rid = fn.replace("_tidy.parquet", "")
+        reg[rid] = DatasetMeta(
+            id=rid,
+            title=f"ONS private rental price index and YoY change ({PRIVATE_RENTAL_INDEX_EDITIONS[ed].label})",
+            family="price_index",
+            filename=fn,
+        )
+
+    for ed in NATIONAL_PARK_HPSSA_EDITIONS:
+        for sheet in NATIONAL_PARK_HPSSA_DATA_SHEETS:
+            stem = f"ons_national_park_hpssa_{ed}_{sheet}"
+            fn = _tid(stem)
+            rid = fn.replace("_tidy.parquet", "")
+            reg[rid] = DatasetMeta(
+                id=rid,
+                title=f"ONS national park HPSSA {sheet} ({NATIONAL_PARK_HPSSA_EDITIONS[ed].label})",
+                family="generic",
+                filename=fn,
+            )
+
     for ed in HOUSE_PRICE_EXPLORER_EDITIONS:
         for sheet in HOUSE_PRICE_EXPLORER_DATA_SHEETS:
             slug = HOUSE_PRICE_EXPLORER_SHEET_SLUGS[sheet]
@@ -201,6 +270,21 @@ def build_registry() -> dict[str, DatasetMeta]:
             reg[rid] = DatasetMeta(
                 id=rid,
                 title=f"ONS House Price Explorer {sheet} ({HOUSE_PRICE_EXPLORER_EDITIONS[ed].label})",
+                family="generic",
+                filename=fn,
+            )
+
+    for ed in VACANT_SECOND_HOMES_EDITIONS:
+        for sheet in VACANT_SECOND_HOMES_DATA_SHEETS:
+            stem = f"ons_vacant_second_homes_{ed}_{sheet}"
+            fn = _tid(stem)
+            rid = fn.replace("_tidy.parquet", "")
+            reg[rid] = DatasetMeta(
+                id=rid,
+                title=(
+                    f"ONS Census 2021 vacant dwellings and second homes (no usual residents) "
+                    f"table {sheet} ({VACANT_SECOND_HOMES_EDITIONS[ed].label})"
+                ),
                 family="generic",
                 filename=fn,
             )

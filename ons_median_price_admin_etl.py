@@ -1,4 +1,4 @@
-"""ONS: Median house prices for administrative geographies — download and tidy (existing or newly built)."""
+"""ONS: Median house prices for administrative geographies — download and tidy (all, existing, or newly built)."""
 
 from __future__ import annotations
 
@@ -8,9 +8,11 @@ from pathlib import Path
 
 import pandas as pd
 
+from housing_data.atomic_io import write_parquet_atomic
 from ons_epc_config import EpcEdition
 from ons_epc_etl import download_edition
 from ons_median_price_admin_config import (
+    MEDIAN_PRICE_ALL_ADMIN_EDITIONS,
     MEDIAN_PRICE_ADMIN_DATA_SHEETS,
     MEDIAN_PRICE_ADMIN_HEADER_ROW,
     MEDIAN_PRICE_EXISTING_ADMIN_EDITIONS,
@@ -92,7 +94,7 @@ def transform_workbook(
         tidy.to_csv(csv_path, index=False)
         pq_path = output_dir / f"{stem}.parquet"
         if write_parquet:
-            tidy.to_parquet(pq_path, index=False)
+            write_parquet_atomic(tidy, pq_path, index=False)
         results[sheet] = tidy
         if verbose:
             print(f"Wrote {csv_path}")
@@ -102,12 +104,14 @@ def transform_workbook(
 
 
 def _edition_from_key(dataset: str, key: str) -> EpcEdition:
-    if dataset == "existing":
+    if dataset == "all":
+        editions = MEDIAN_PRICE_ALL_ADMIN_EDITIONS
+    elif dataset == "existing":
         editions = MEDIAN_PRICE_EXISTING_ADMIN_EDITIONS
     elif dataset == "new":
         editions = MEDIAN_PRICE_NEW_ADMIN_EDITIONS
     else:
-        raise SystemExit(f"Unknown --dataset {dataset!r} (use existing or new).")
+        raise SystemExit(f"Unknown --dataset {dataset!r} (use all, existing, or new).")
     if key not in editions:
         raise SystemExit(f"Unknown edition {key!r}. Choose one of: {', '.join(sorted(editions))}.")
     return editions[key]
@@ -115,13 +119,13 @@ def _edition_from_key(dataset: str, key: str) -> EpcEdition:
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="ONS median price paid by administrative geography (existing or newly built dwellings).",
+        description="ONS median price paid by administrative geography (all, existing, or newly built dwellings).",
     )
     p.add_argument(
         "--dataset",
-        choices=("existing", "new"),
+        choices=("all", "existing", "new"),
         required=True,
-        help="existing = HPSSA former dataset 11; new = former dataset 10.",
+        help="all = all dwellings, existing = former dataset 11, new = former dataset 10.",
     )
     p.add_argument(
         "--edition",
@@ -162,7 +166,10 @@ def main() -> None:
     if args.transform_only and args.extract_only:
         raise SystemExit("Choose at most one of --extract-only and --transform-only.")
 
-    if args.dataset == "existing":
+    if args.dataset == "all":
+        file_prefix = "ons_median_price_all_admin"
+        dwelling_class = "all_dwellings"
+    elif args.dataset == "existing":
         file_prefix = "ons_median_price_existing_admin"
         dwelling_class = "existing"
     else:

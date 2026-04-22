@@ -1,4 +1,4 @@
-"""Streamlit: ONS median price paid by administrative geography (existing vs newly built dwellings)."""
+"""Streamlit: ONS median price paid by administrative geography (all, existing, or newly built dwellings)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,9 @@ import streamlit as st
 from chart_theme import ST_WIDTH
 
 from ons_median_price_admin_config import (
+    ALL_DATASET_PAGE,
     EXISTING_DATASET_PAGE,
+    MEDIAN_PRICE_ALL_ADMIN_EDITIONS,
     MEDIAN_PRICE_ADMIN_DATA_SHEETS,
     MEDIAN_PRICE_EXISTING_ADMIN_EDITIONS,
     MEDIAN_PRICE_NEW_ADMIN_EDITIONS,
@@ -22,7 +24,11 @@ from streamlit_page_helpers import ogl_attribution_expander
 
 
 def _expected_parquet_path(edition: str, table: str, *, dwelling: str) -> Path:
-    prefix = "ons_median_price_existing_admin" if dwelling == "existing" else "ons_median_price_new_admin"
+    prefix = {
+        "all": "ons_median_price_all_admin",
+        "existing": "ons_median_price_existing_admin",
+        "new": "ons_median_price_new_admin",
+    }[dwelling]
     return PROCESSED_DIR / f"{prefix}_{edition}_{table}_tidy.parquet"
 
 
@@ -48,21 +54,34 @@ def main() -> None:
     st.title("Median house prices — administrative geographies")
     st.caption(
         "ONS **HPSSA-style** tables: median price paid by region, local authority, county, or combined authority. "
-        "Run `python ons_median_price_admin_etl.py --dataset existing|new --edition <key>`."
+        "Run `python ons_median_price_admin_etl.py --dataset all|existing|new --edition <key>`."
     )
     st.divider()
     ogl_attribution_expander()
+    st.info(
+        "**Coverage vs legacy explorer:** this workbook uses **rolling-year quarters** and current HPSSA-style "
+        "admin geographies (see edition notes). For **1995–2013 LA medians** from the static legacy workbook only, "
+        "use **House Price Explorer** in the sidebar — definitions differ; do not chain the series without documentation."
+    )
     st.markdown(
-        f"[Existing dwellings (ONS)]({EXISTING_DATASET_PAGE}) · [Newly built dwellings (ONS)]({NEW_DATASET_PAGE})"
+        f"[All dwellings (ONS)]({ALL_DATASET_PAGE}) · [Existing dwellings (ONS)]({EXISTING_DATASET_PAGE}) · [Newly built dwellings (ONS)]({NEW_DATASET_PAGE})"
     )
 
     dwelling = st.sidebar.radio(
         "Dwelling type",
-        options=("existing", "new"),
-        format_func=lambda x: "Existing dwellings" if x == "existing" else "Newly built dwellings",
+        options=("all", "existing", "new"),
+        format_func=lambda x: {
+            "all": "All dwellings",
+            "existing": "Existing dwellings",
+            "new": "Newly built dwellings",
+        }[x],
         horizontal=True,
     )
-    editions = MEDIAN_PRICE_EXISTING_ADMIN_EDITIONS if dwelling == "existing" else MEDIAN_PRICE_NEW_ADMIN_EDITIONS
+    editions = {
+        "all": MEDIAN_PRICE_ALL_ADMIN_EDITIONS,
+        "existing": MEDIAN_PRICE_EXISTING_ADMIN_EDITIONS,
+        "new": MEDIAN_PRICE_NEW_ADMIN_EDITIONS,
+    }[dwelling]
     edition = st.sidebar.selectbox(
         "Edition",
         options=list(editions.keys()),

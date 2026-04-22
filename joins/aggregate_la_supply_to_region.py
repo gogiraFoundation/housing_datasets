@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from housing_data.atomic_io import write_parquet_atomic
+
 _REPO = Path(__file__).resolve().parents[1]
 _DEFAULT_PROCESSED = _REPO / "data" / "processed"
 _DEFAULT_REF = _REPO / "data" / "reference"
@@ -86,7 +88,7 @@ def main() -> None:
     agg = aggregate(out_dir, args.housebuilding_edition, args.mainfuel_edition)
     stem = f"region_supply_from_la_{args.housebuilding_edition}_via_mf_{args.mainfuel_edition}"
     pq = out_dir / f"{stem}.parquet"
-    agg.to_parquet(pq, index=False)
+    write_parquet_atomic(agg, pq, index=False)
     print(f"Wrote {pq}")
 
 

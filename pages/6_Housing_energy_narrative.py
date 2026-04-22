@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 
 import altair as alt
+import numpy as np
+import pandas as pd
 import streamlit as st
 
 from chart_theme import ST_WIDTH
@@ -122,6 +124,50 @@ def main() -> None:
         "See `joins/README.md` for geography join rules. "
         "Do not treat the sections above as one harmonised time series without explicit alignment."
     )
+
+    snap_p = PROCESSED_DIR / "joined_la_housing_market_snapshot.parquet"
+    reg_p = PROCESSED_DIR / "region_housing_market_snapshot.parquet"
+    with st.expander("Explore: starts per 1,000 vs regional rolling EPC C+ (Lane A + Lane B)"):
+        st.caption(
+            "**Y-axis is region-attributed:** five-year rolling EPC C+ % is published at region level only; "
+            "each LA is shown with its parent region’s latest rolling value — not an LA-level EPC estimate."
+        )
+        if not snap_p.is_file() or not reg_p.is_file():
+            st.info("Build `joined_la_housing_market_snapshot.parquet` and `region_housing_market_snapshot.parquet` to enable this chart.")
+        else:
+            la = load_processed_parquet(str(snap_p))
+            reg = load_processed_parquet(str(reg_p))
+            if "ee_epc_c_plus_pct" not in reg.columns or "region_name" not in la.columns:
+                st.info("Snapshot files do not contain expected region EPC columns.")
+            else:
+                la = la.copy()
+                la["population"] = pd.to_numeric(la.get("population"), errors="coerce")
+                la["supply_starts"] = pd.to_numeric(la.get("supply_starts"), errors="coerce")
+                la["starts_per_1000"] = np.where(
+                    la["population"].notna() & (la["population"] > 0),
+                    la["supply_starts"] / la["population"] * 1000.0,
+                    np.nan,
+                )
+                rsub = reg[["region_name", "ee_epc_c_plus_pct"]].drop_duplicates(subset=["region_name"])
+                plot = la.merge(rsub, on="region_name", how="inner")
+                plot = plot.dropna(subset=["starts_per_1000", "ee_epc_c_plus_pct"])
+                if plot.empty:
+                    st.info("No overlapping rows after merge.")
+                else:
+                    chx = (
+                        alt.Chart(plot)
+                        .mark_circle(size=50, opacity=0.65)
+                        .encode(
+                            x=alt.X("starts_per_1000:Q", title="Starts per 1,000 population (Lane A)"),
+                            y=alt.Y(
+                                "ee_epc_c_plus_pct:Q",
+                                title="EPC C+ % (five-year rolling — region value)",
+                            ),
+                            tooltip=["lad_code", "la_name", "region_name", "starts_per_1000", "ee_epc_c_plus_pct"],
+                        )
+                        .properties(height=380)
+                    )
+                    st.altair_chart(chx, width=ST_WIDTH)
 
 
 main()

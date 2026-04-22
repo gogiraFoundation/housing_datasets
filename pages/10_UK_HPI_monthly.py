@@ -10,6 +10,8 @@ import streamlit as st
 
 from chart_theme import ST_WIDTH
 
+from housing_analytics.hpi_prpi_callout import buy_vs_rent_spread_caption
+from ons_private_rental_index_config import PRIVATE_RENTAL_INDEX_EDITIONS
 from ons_uk_hpi_monthly_config import DATASET_PAGE, UK_HPI_DATA_SHEETS, UK_HPI_MONTHLY_EDITIONS
 from streamlit_io import PROCESSED_DIR, load_processed_parquet
 from streamlit_page_helpers import ogl_attribution_expander
@@ -39,6 +41,28 @@ def _expected_parquet_path(edition: str, sheet: str) -> Path:
 
 def _parse_time_period(s: pd.Series) -> pd.Series:
     return pd.to_datetime(s.astype(str), format="%b %Y", errors="coerce")
+
+
+def _latest_prpi_context() -> str | None:
+    for ed in PRIVATE_RENTAL_INDEX_EDITIONS:
+        p = PROCESSED_DIR / f"ons_private_rental_index_{ed}_tidy.parquet"
+        if not p.is_file():
+            continue
+        df = load_processed_parquet(str(p))
+        sub = df[
+            (df["variable"].astype(str) == "year-on-year-change")
+            & (df["geography_name"].astype(str).isin(["United Kingdom", "Great Britain"]))
+        ].copy()
+        if sub.empty:
+            continue
+        sub["period"] = pd.to_datetime(sub["month_label"].astype(str), format="%b-%y", errors="coerce")
+        sub["value"] = pd.to_numeric(sub["value"], errors="coerce")
+        sub = sub.dropna(subset=["period", "value"]).sort_values("period")
+        if sub.empty:
+            continue
+        row = sub.iloc[-1]
+        return f"Latest PRPI YoY ({row['month_label']}): {float(row['value']):+.2f}% (`{p.name}`)."
+    return None
 
 
 def main() -> None:
@@ -152,6 +176,19 @@ def main() -> None:
         file_name=f"ons_uk_hpi_monthly_{edition}_{table}_filtered.csv",
         mime="text/csv",
     )
+    st.divider()
+    st.subheader("Related: Private rental price index")
+    prpi_note = _latest_prpi_context()
+    if prpi_note:
+        st.caption(prpi_note)
+    st.markdown(
+        "Use the dedicated **Private rental price index** page for buy-vs-rent indexed comparison, "
+        "rebased trends, and affordability context."
+    )
+    cap = buy_vs_rent_spread_caption(PROCESSED_DIR, hpi_edition=edition)
+    if cap:
+        with st.expander("Buy vs rent — quick indexed spread (Great Britain)"):
+            st.markdown(cap)
 
 
 main()

@@ -37,3 +37,12 @@ def test_transform_la_four_cols():
     tidy = transform_sheet(df, "2a", dwelling_class="existing")
     assert len(tidy) == 2
     assert "local_authority_name" in tidy.columns
+
+
+def test_transform_marks_all_dwellings_class():
+    df = pd.DataFrame(
+        [["X1", "Region A", 100.0]],
+        columns=["Area Code", "Area Name", "Year ending Dec 1995"],
+    )
+    tidy = transform_sheet(df, "1a", dwelling_class="all_dwellings")
+    assert tidy["dwelling_class"].iloc[0] == "all_dwellings"

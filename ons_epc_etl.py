@@ -12,6 +12,8 @@ from typing import Any
 
 import pandas as pd
 import requests
+
+from housing_data.atomic_io import write_parquet_atomic
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -285,7 +287,7 @@ def transform_workbook(
         tidy.to_csv(csv_path, index=False)
         if write_parquet:
             pq_path = output_dir / f"{stem}.parquet"
-            tidy.to_parquet(pq_path, index=False)
+            write_parquet_atomic(tidy, pq_path, index=False)
         results[sheet] = tidy
         if verbose:
             print(f"Wrote {csv_path}")

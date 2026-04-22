@@ -12,6 +12,7 @@ import streamlit as st
 from chart_theme import ST_WIDTH
 
 from ons_ee_fiveyear_config import DATASET_PAGE, EE_DATA_SHEETS, EE_FIVEYEAR_EDITIONS
+from ons_median_eescore_config import MEDIAN_EESCORE_DATA_SHEETS, MEDIAN_EESCORE_EDITIONS
 from streamlit_io import PROCESSED_DIR, load_processed_parquet
 from streamlit_page_helpers import ogl_attribution_expander
 
@@ -174,6 +175,58 @@ def main() -> None:
         file_name=f"ons_ee_fiveyear_{edition}_{table}_filtered.csv",
         mime="text/csv",
     )
+
+    st.divider()
+    st.subheader("Median energy efficiency score (separate ONS dataset)")
+    st.caption("Geography note: use country/region labels here; this dataset is not an LA rent/price drill-down source.")
+    med_edition = st.selectbox(
+        "Median score edition",
+        options=list(MEDIAN_EESCORE_EDITIONS.keys()),
+        format_func=lambda k: f"{k} ({MEDIAN_EESCORE_EDITIONS[k].label})",
+        index=0,
+    )
+    med_table = st.selectbox("Median score table", options=list(MEDIAN_EESCORE_DATA_SHEETS))
+    med_path = PROCESSED_DIR / f"ons_median_eescore_{med_edition}_{med_table}_tidy.parquet"
+    if not med_path.is_file():
+        st.info(
+            f"Missing `{med_path.name}`. Run `python ons_median_eescore_etl.py --edition {med_edition}` "
+            "to render this section."
+        )
+        return
+    med = load_processed_parquet(str(med_path)).copy()
+    if "country_or_region_name" in med.columns:
+        med_geo_col = "country_or_region_name"
+    elif "region_name" in med.columns:
+        med_geo_col = "region_name"
+    else:
+        med_geo_col = None
+    if med_geo_col is None:
+        st.dataframe(med, width=ST_WIDTH, height=min(520, 120 + 30 * min(len(med), 30)))
+    else:
+        med["value"] = pd.to_numeric(med["value"], errors="coerce")
+        show = med.dropna(subset=["value"]).copy()
+        pick = sorted(show[med_geo_col].dropna().astype(str).unique())
+        sel = st.multiselect("Geography (median score)", pick, default=pick[: min(6, len(pick))])
+        if sel:
+            show = show[show[med_geo_col].isin(sel)]
+        chm = (
+            alt.Chart(show)
+            .mark_bar()
+            .encode(
+                x=alt.X("value:Q", title="Median EPC score"),
+                y=alt.Y(f"{med_geo_col}:N", sort="-x", title="Geography"),
+                tooltip=[med_geo_col, alt.Tooltip("value:Q", format=".2f")],
+            )
+            .properties(height=min(380, 24 * max(5, len(show))))
+        )
+        st.altair_chart(chm, width=ST_WIDTH)
+        st.dataframe(show, width=ST_WIDTH, height=min(560, 120 + 30 * min(len(show), 30)))
+        st.download_button(
+            "Download filtered median score rows (CSV)",
+            data=show.to_csv(index=False).encode("utf-8"),
+            file_name=f"ons_median_eescore_{med_edition}_{med_table}_filtered.csv",
+            mime="text/csv",
+        )
 
 
 main()

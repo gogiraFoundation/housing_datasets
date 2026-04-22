@@ -1,0 +1,11 @@
+{
+  "source_url": "https://download.ons.gov.uk/downloads/datasets/index-private-housing-rental-prices/editions/time-series/versions/41.csv",
+  "dataset_page_url": "https://www.ons.gov.uk/datasets/index-private-housing-rental-prices",
+  "edition_key": "v41",
+  "edition_label": "February 2024 (version 41)",
+  "downloaded_at": "2026-04-21T05:39:30Z",
+  "sha256": "8f88339ae8aff55dfa83efe4f46d60ad84dd8a864ac9efb29aedd6860d7cd697",
+  "bytes": 467195,
+  "file_name": "ons_private_rental_index_v41.csv",
+  "attribution": "Contains public sector information licensed under the Open Government Licence v3.0. Source: Office for National Statistics."
+}

@@ -35,3 +35,6 @@ jobs:
 
       - name: pytest
         run: pytest -q
+
+      - name: Build processed manifest
+        run: python scripts/build_processed_manifest.py

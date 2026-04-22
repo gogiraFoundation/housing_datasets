@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from housing_data.atomic_io import write_parquet_atomic
+
 _REPO = Path(__file__).resolve().parents[1]
 _DEFAULT_PROCESSED = _REPO / "data" / "processed"
 _DEFAULT_REF = _REPO / "data" / "reference"
@@ -85,7 +87,7 @@ def main() -> None:
     pq = out_dir / f"{stem}.parquet"
     meta_path = out_dir / f"{stem}.meta.json"
 
-    ranked.to_parquet(pq, index=False)
+    write_parquet_atomic(ranked, pq, index=False)
     meta = {
         "source": str(hb_path),
         "population_used": str(args.population) if pop is not None else None,

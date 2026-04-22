@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -22,12 +23,63 @@ from ons_housebuilding_country_config import (
 )
 from ons_housebuilding_country_periods import preferred_period_order
 from ons_housebuilding_la_config import DATASET_PAGE as HB_LA_DATASET_PAGE, HOUSEBUILDING_LA_EDITIONS
+from housing_analytics.hpi_prpi_callout import buy_vs_rent_spread_caption
+from housing_analytics.insights_briefing import (
+    DEFAULT_PE_ANCHOR_YEARS,
+    DEFAULT_SUPPLY_COMPARE_FY,
+    PRESET_NATIONAL,
+    build_insights_payload,
+    insights_inputs_snapshot,
+)
 from streamlit_io import PROCESSED_DIR, load_processed_parquet
 from streamlit_page_helpers import ogl_attribution_expander
 
 _PERIOD_START_YEAR = re.compile(r"^Q2 (\d{4})")
 
 FOUR_NATIONS = {"England", "Wales", "Scotland", "Northern Ireland"}
+
+_BRIEF_PE_ED = "current"
+_BRIEF_HB_LA_ED = "fye_march2025"
+_BRIEF_HB_COUNTRY_ED = "current"
+_BRIEF_HPI_ED = "march2026"
+_BRIEF_MEDIAN_ED = "current"
+_BRIEF_EPC_ED = "march2025"
+_BRIEF_EE_ED = "march2025"
+
+
+def _briefing_inputs_snapshot(root: Path) -> str:
+    return insights_inputs_snapshot(
+        root,
+        pe_ed=_BRIEF_PE_ED,
+        hb_la_ed=_BRIEF_HB_LA_ED,
+        hb_country_ed=_BRIEF_HB_COUNTRY_ED,
+        hpi_ed=_BRIEF_HPI_ED,
+        median_ed=_BRIEF_MEDIAN_ED,
+        epc_ed=_BRIEF_EPC_ED,
+        ee_ed=_BRIEF_EE_ED,
+        census_stem=POPULATION_DERIVED_STEM,
+    )
+
+
+@st.cache_data
+def _uk_summary_briefing_payload(processed_root: str, inputs_snapshot: str) -> dict[str, Any]:
+    _ = inputs_snapshot
+    return build_insights_payload(
+        processed_root,
+        pe_ed=_BRIEF_PE_ED,
+        hb_la_ed=_BRIEF_HB_LA_ED,
+        hb_country_ed=_BRIEF_HB_COUNTRY_ED,
+        hpi_ed=_BRIEF_HPI_ED,
+        median_ed=_BRIEF_MEDIAN_ED,
+        epc_ed=_BRIEF_EPC_ED,
+        ee_ed=_BRIEF_EE_ED,
+        census_stem=POPULATION_DERIVED_STEM,
+        preset=PRESET_NATIONAL,
+        custom_regions=(),
+        horizon_years=5,
+        pe_anchor_years=DEFAULT_PE_ANCHOR_YEARS,
+        supply_compare_fy=DEFAULT_SUPPLY_COMPARE_FY,
+    )
 
 
 def _norm_lad(x: object) -> str:
@@ -151,6 +203,8 @@ def _summary_payload(
         "census_rates_note": None,
         "ee_trend_long": None,
         "epc_ee_scatter": None,
+        "manifest_preview": None,
+        "hpi_prpi_callout": None,
     }
 
     # Country
@@ -440,6 +494,47 @@ def _summary_payload(
         )
         out["epc_ee_scatter"] = sc
 
+    prpi_path = root / "ons_private_rental_index_v41_tidy.parquet"
+    if prpi_path.is_file():
+        prpi = load_processed_parquet(prpi_path.relative_to(root))
+        psub = prpi[
+            (prpi["variable"].astype(str) == "year-on-year-change")
+            & (prpi["geography_name"].astype(str).isin(["United Kingdom", "Great Britain"]))
+        ].copy()
+        if not psub.empty:
+            psub["period"] = pd.to_datetime(psub["month_label"].astype(str), format="%b-%y", errors="coerce")
+            psub["value"] = pd.to_numeric(psub["value"], errors="coerce")
+            psub = psub.dropna(subset=["period", "value"]).sort_values("period")
+            if not psub.empty:
+                r = psub.iloc[-1]
+                bullets.append(f"Latest **PRPI YoY** ({r['month_label']}): **{float(r['value']):+.2f}%**.")
+
+    hpi3_path = root / "ons_uk_hpi_monthly_march2026_3_tidy.parquet"
+    if hpi3_path.is_file():
+        hpi3 = load_processed_parquet(hpi3_path.relative_to(root))
+        hsub = hpi3[hpi3["geography"].astype(str) == "United Kingdom"].copy()
+        if hsub.empty:
+            hsub = hpi3[hpi3["geography"].astype(str) == "Great Britain"].copy()
+        if not hsub.empty:
+            hsub["period"] = pd.to_datetime(hsub["time_period"].astype(str), format="%b %Y", errors="coerce")
+            hsub["value"] = pd.to_numeric(hsub["value"], errors="coerce")
+            hsub = hsub.dropna(subset=["period", "value"]).sort_values("period")
+            if not hsub.empty:
+                r = hsub.iloc[-1]
+                bullets.append(f"Latest **HPI annual change** ({r['time_period']}): **{float(r['value']):+.2f}%**.")
+
+    out["hpi_prpi_callout"] = buy_vs_rent_spread_caption(root)
+
+    manifest_path = root / "processed_manifest.json"
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            proc = manifest.get("processed_parquet", [])
+            preview = pd.DataFrame(proc)[["path", "num_rows", "size_bytes", "mtime_utc"]].head(20)
+            out["manifest_preview"] = preview
+        except Exception:
+            out["manifest_preview"] = None
+
     if include_bundled:
         bundled_df = None
         if path_bundled_pq.is_file():
@@ -474,7 +569,11 @@ def _summary_payload(
     return out
 
 
-def _render_overview_tab(bullets: list[str]) -> None:
+def _render_overview_tab(
+    bullets: list[str],
+    manifest_preview: pd.DataFrame | None,
+    hpi_prpi_callout: str | None,
+) -> None:
     st.markdown(
         "This page summarises **several ONS publications** and optional bundled inputs. Each tab uses the "
         "periods and editions selected in the sidebar. The views are **not** a single harmonised time series; "
@@ -521,6 +620,18 @@ def _render_overview_tab(bullets: list[str]) -> None:
             st.markdown(f"- {b}")
     else:
         st.info("Run ETL scripts so `data/processed/` contains the Parquet files used on the other tabs.")
+    if hpi_prpi_callout:
+        with st.expander("Buy vs rent (indexed — PRPI vs HPI)"):
+            st.markdown(hpi_prpi_callout)
+    st.subheader("Data freshness / build catalogue")
+    if manifest_preview is None or manifest_preview.empty:
+        st.caption("No `processed_manifest.json` detected. Run `python scripts/build_processed_manifest.py`.")
+    else:
+        st.dataframe(
+            manifest_preview,
+            width=ST_WIDTH,
+            height=min(520, 120 + 28 * min(len(manifest_preview), 15)),
+        )
 
     ogl_attribution_expander()
 
@@ -870,6 +981,64 @@ def _render_bundled_tab(payload: dict[str, Any]) -> None:
         st.altair_chart(ch_b, width=ST_WIDTH)
 
 
+def _render_insights_briefing_strip() -> None:
+    """National England & Wales hero metrics (same defaults as Housing insights briefing)."""
+    st.subheader("Briefing snapshot — England & Wales")
+    st.caption(
+        "Workplace-based price/earnings where used · tidy Parquet under `data/processed/` · "
+        f"PE `{_BRIEF_PE_ED}` · HB LA `{_BRIEF_HB_LA_ED}` · HB country `{_BRIEF_HB_COUNTRY_ED}` · "
+        f"HPI `{_BRIEF_HPI_ED}` · Median admin `{_BRIEF_MEDIAN_ED}` · EPC `{_BRIEF_EPC_ED}` · EE `{_BRIEF_EE_ED}` · "
+        f"PE anchor **{DEFAULT_PE_ANCHOR_YEARS[0]}–{DEFAULT_PE_ANCHOR_YEARS[1]}** when present in data · "
+        f"Supply comparison **{DEFAULT_SUPPLY_COMPARE_FY[0]}** → **{DEFAULT_SUPPLY_COMPARE_FY[1]}**."
+    )
+    snap_b = _briefing_inputs_snapshot(Path(PROCESSED_DIR))
+    brief_payload = _uk_summary_briefing_payload(str(PROCESSED_DIR), snap_b)
+    meta_b = brief_payload["meta"]
+    hero_b = brief_payload["hero"]
+    st.markdown(
+        f"{meta_b.get('horizon_label', '')} Preset: **{meta_b.get('preset_label', '')}**."
+    )
+    b1, b2, b3, b4 = st.columns(4)
+    with b1:
+        v_end = hero_b.get("ew_ratio_end")
+        d_lbl = hero_b.get("ew_ratio_delta_str")
+        st.metric(
+            label="E&W median P/E (table 1c)",
+            value=f"{v_end:.2f}" if v_end is not None else "—",
+            delta=d_lbl if d_lbl else None,
+        )
+    with b2:
+        n_ep = hero_b.get("entry_pressure_n")
+        st.metric(
+            label="LAs: Δ LQ price > Δ median",
+            value=f"{int(n_ep)}" if n_ep is not None else "—",
+        )
+    with b3:
+        sr, sd = hero_b.get("supply_region"), hero_b.get("supply_delta")
+        sf0, sf1 = hero_b.get("supply_fy0"), hero_b.get("supply_fy1")
+        if sr and sd is not None and sf0 and sf1:
+            st.metric(
+                label=f"Largest Δ regional starts ({sf0} → {sf1})",
+                value=sr,
+                delta=f"{sd:+.0f} vs {sf0}",
+            )
+        else:
+            st.metric(label="Largest Δ regional starts", value="—")
+    with b4:
+        br, wr = hero_b.get("epc_best_region"), hero_b.get("epc_worst_region")
+        bpct, wpct = hero_b.get("epc_best_pct"), hero_b.get("epc_worst_pct")
+        if br and wr and bpct is not None and wpct is not None:
+            st.metric(label="EPC A–C — best region", value=f"{br} ({bpct:.1f}%)")
+            st.caption(f"Lowest A–C: **{wr}** ({wpct:.1f}%).")
+        else:
+            st.metric(label="EPC A–C — best region", value="—")
+    try:
+        st.page_link("pages/24_Housing_insights_briefing.py", label="Open Housing insights briefing")
+    except Exception:
+        st.markdown("Full one-page read: **`pages/24_Housing_insights_briefing.py`**")
+    st.divider()
+
+
 def main() -> None:
     st.set_page_config(page_title="UK housing summary", layout="wide")
     st.title("UK housing summary")
@@ -877,7 +1046,7 @@ def main() -> None:
         "Cross-dataset snapshot of UK house building (ONS country and LA), England and Wales EPC energy metrics, "
         "and optional bundled starts. Charts use Altair at full width (`chart_theme.ST_WIDTH`)."
     )
-    st.divider()
+    _render_insights_briefing_strip()
 
     with st.sidebar.expander("Data editions", expanded=True):
         hb_country_ed = st.selectbox(
@@ -963,7 +1132,7 @@ def main() -> None:
     tabs = st.tabs(tab_labels)
 
     with tabs[0]:
-        _render_overview_tab(bullets)
+        _render_overview_tab(bullets, payload.get("manifest_preview"), payload.get("hpi_prpi_callout"))
 
     with tabs[1]:
         _render_country_tab(payload, hb_country_ed, int(country_trend_years))
