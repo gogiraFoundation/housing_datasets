@@ -110,6 +110,20 @@ Example (platform env var):
 HOUSING_PROCESSED_DIR=/opt/housing/data/processed
 ```
 
+If your platform cannot pre-populate Parquet at build time, you can enable first-boot ETL:
+
+```bash
+HOUSING_BOOTSTRAP_ETL=1
+```
+
+Short startup env vars for hosted deployments:
+
+- `HOUSING_BOOTSTRAP_ETL=1` — when no Parquet exists, run `scripts/run_etl_suite.py` once at app startup.
+- `HOUSING_BOOTSTRAP_TIMEOUT_SEC=10800` — timeout (seconds) for the first-boot ETL run.
+- `ETL_PROFILE=standard|full` — choose the bootstrap ETL profile (`standard` default).
+- `ETL_WITH_JOINS=1` — include join builders in first-boot ETL (slower startup).
+- `ETL_CONTINUE_ON_ERROR=1` — keep running remaining ETL steps if one fails.
+
 After deployment, check this directory contains files like `ons_housebuilding_la_<edition>_tidy.parquet`; Streamlit pages (including **House building — local authority**) read from this resolved directory.
 
 Optional wrapper with health checks and restart: [`run_dashboard.py`](run_dashboard.py).

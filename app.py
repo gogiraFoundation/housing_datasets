@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
+from pathlib import Path
 
 import streamlit as st
 
@@ -20,8 +23,54 @@ def _processed_parquet_count() -> int:
     return sum(1 for _ in PROCESSED_DIR.glob("*.parquet"))
 
 
+def _maybe_bootstrap_etl() -> str | None:
+    """Optionally run ETL once when processed parquet is empty.
+
+    Set `HOUSING_BOOTSTRAP_ETL=1` in deployments that start from a clean checkout
+    (for example Streamlit Community Cloud).
+    """
+    if os.environ.get("HOUSING_BOOTSTRAP_ETL", "0").strip() != "1":
+        return None
+    if _processed_parquet_count() > 0:
+        return None
+
+    marker = PROCESSED_DIR / ".etl_bootstrap_ok"
+    if marker.exists():
+        return None
+
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    cmd = [sys.executable, "scripts/run_etl_suite.py", "--profile", os.environ.get("ETL_PROFILE", "standard")]
+    if os.environ.get("ETL_WITH_JOINS", "0").strip() == "1":
+        cmd.append("--with-joins")
+    if os.environ.get("ETL_CONTINUE_ON_ERROR", "0").strip() == "1":
+        cmd.append("--continue-on-error")
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=Path(__file__).resolve().parent,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=int(os.environ.get("HOUSING_BOOTSTRAP_TIMEOUT_SEC", "10800")),
+        )
+    except Exception as exc:
+        return f"ETL bootstrap failed to start: {exc}"
+
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or "").strip()
+        tail = err[-1200:] if err else "No output captured."
+        return f"ETL bootstrap failed (exit {proc.returncode}). Tail:\n{tail}"
+
+    marker.write_text("ok\n", encoding="utf-8")
+    return None
+
+
+bootstrap_err = _maybe_bootstrap_etl()
 if _processed_parquet_count() == 0:
     override = os.environ.get("HOUSING_PROCESSED_DIR", "").strip()
+    if bootstrap_err:
+        st.warning(f"`HOUSING_BOOTSTRAP_ETL=1` was set but ETL failed.\n\n{bootstrap_err}")
     st.error(
         "**No processed Parquet files found.** The dashboard reads tidy outputs from a single directory "
         "(by default `data/processed/`, which is **gitignored**). Without those files, topic pages will be empty "
@@ -32,7 +81,9 @@ if _processed_parquet_count() == 0:
         "- **Deployed:** run the same ETL in your image build or release job, **or** copy pre-built `*.parquet` into "
         "the container and set **`HOUSING_PROCESSED_DIR`** to that absolute path (Streamlit Cloud: "
         "[Secrets](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/secrets-management) "
-        "cannot mount files — use a build step that writes Parquet into the image, or a host path your platform supports)."
+        "cannot mount files — use a build step that writes Parquet into the image, or a host path your platform supports).\n"
+        "- **Optional fallback:** set `HOUSING_BOOTSTRAP_ETL=1` to run `scripts/run_etl_suite.py` on first boot when "
+        "no Parquet exists (slower startup, but self-healing on clean deploys)."
     )
     if override:
         st.warning(f"`HOUSING_PROCESSED_DIR` is set to `{override}` → resolved `{PROCESSED_DIR}` but no `*.parquet` was found there.")
