@@ -16,4 +16,4 @@ RUN chmod +x /app/scripts/build_deploy_parquet.sh && /app/scripts/build_deploy_p
 
 EXPOSE 8501
 
-CMD ["python", "-m", "streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501", "--server.headless=true"]
+CMD ["sh", "-c", "python scripts/ensure_processed_parquet.py && exec python -m streamlit run app.py --server.address=0.0.0.0 --server.port=8501 --server.headless=true"]

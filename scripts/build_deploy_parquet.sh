@@ -35,5 +35,6 @@ fi
 "${PYTHON}" scripts/download_lad_boundaries.py
 "${PYTHON}" scripts/download_region_boundaries.py
 "${PYTHON}" scripts/build_processed_manifest.py
+"${PYTHON}" scripts/ensure_processed_parquet.py
 
 echo "[build] done: data/processed is populated"

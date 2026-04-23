@@ -98,10 +98,19 @@ streamlit run app.py
 ```
 
 To refresh pipelines then open the app, run `./start.sh` from the repo root (requires network for ONS downloads). ETL steps are driven by [`scripts/run_etl_suite.py`](scripts/run_etl_suite.py) (per-step timeouts, JSON log lines to stdout). **`ETL_PROFILE=standard`** (default) matches the previous monolithic `start.sh` list. **`ETL_PROFILE=full`** adds Census TS008 and `scripts/build_processed_manifest.py`. **`ETL_WITH_JOINS=1`** appends join scripts from `joins/` (see [Joins](#running-pipelines) below). Override per-step timeout with `HOUSING_ETL_STEP_TIMEOUT` (seconds) and Census with `HOUSING_ETL_CENSUS_TIMEOUT`. If `data/geo/lad_uk_wgs84.geojson` is missing, `start.sh` runs [`scripts/download_lad_boundaries.py`](scripts/download_lad_boundaries.py) once so the **Map — local authority** page has UK boundaries; set `SKIP_GEO=1` to skip that fetch.
+`start.sh` now also runs [`scripts/ensure_processed_parquet.py`](scripts/ensure_processed_parquet.py) and exits early if no `*.parquet` files are present in the resolved processed directory (set `ALLOW_EMPTY_PROCESSED=1` to bypass for intentional empty boots).
 
 Use the sidebar to open each theme. Processed Parquet/CSV files must exist under `data/processed/` for the ONS-backed pages (run the matching ETL first).
 
 **Hosted / container deploys:** `data/processed/*` is **gitignored**, so a clean checkout has **no** Parquet until you run ETL in the image build or copy artefacts in. Set **`HOUSING_PROCESSED_DIR`** to an absolute path where those `*.parquet` files live (Streamlit and the FastAPI API both honour it). The home page shows a clear notice when no Parquet is found.
+
+Example (platform env var):
+
+```bash
+HOUSING_PROCESSED_DIR=/opt/housing/data/processed
+```
+
+After deployment, check this directory contains files like `ons_housebuilding_la_<edition>_tidy.parquet`; Streamlit pages (including **House building — local authority**) read from this resolved directory.
 
 Optional wrapper with health checks and restart: [`run_dashboard.py`](run_dashboard.py).
 
@@ -120,6 +129,7 @@ ETL_PROFILE=full ETL_WITH_JOINS=1 ./scripts/build_deploy_parquet.sh
 ```
 
 For containerized deploys, [`Dockerfile`](Dockerfile) runs this script at image build so `data/processed/*.parquet` exists before app boot.
+The deploy build script also runs [`scripts/ensure_processed_parquet.py`](scripts/ensure_processed_parquet.py), so image builds fail fast when Parquet generation produces no outputs.
 
 ### Tests
 

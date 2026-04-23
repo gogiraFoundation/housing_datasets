@@ -54,6 +54,13 @@ else
   echo "[start] SKIP_ETL=1 / --app-only: skipping pipelines"
 fi
 
+if [[ "${ALLOW_EMPTY_PROCESSED:-0}" != "1" ]]; then
+  echo "[start] verifying processed parquet exists"
+  "$PYTHON" scripts/ensure_processed_parquet.py
+else
+  echo "[start] ALLOW_EMPTY_PROCESSED=1: skipping parquet presence check"
+fi
+
 GEO_FILE="$ROOT/data/geo/lad_uk_wgs84.geojson"
 if [[ "${SKIP_GEO:-0}" == "1" ]]; then
   if [[ ! -f "$GEO_FILE" ]]; then

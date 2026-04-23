@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pandas as pd
 import streamlit as st
 
@@ -13,18 +11,14 @@ from housing_data.housebuilding_la import (
     filter_housebuilding_la,
     line_by_year_chart,
     prepare_housebuilding_la_df,
-    processed_parquet_path,
     sorted_financial_years,
 )
 from ons_housebuilding_la_config import DATASET_PAGE, HOUSEBUILDING_LA_EDITIONS
-from streamlit_io import load_processed_parquet
+from streamlit_io import PROCESSED_DIR, load_processed_parquet
 from streamlit_page_helpers import ogl_attribution_expander
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-
-
-def _expected_parquet_path(edition: str) -> Path:
-    return processed_parquet_path(_REPO_ROOT, edition)
+def _expected_parquet_filename(edition: str) -> str:
+    return f"ons_housebuilding_la_{edition}_tidy.parquet"
 
 
 def load_table(path_str: str) -> pd.DataFrame:
@@ -50,9 +44,10 @@ def main() -> None:
         index=0,
     )
 
-    path = _expected_parquet_path(edition)
+    filename = _expected_parquet_filename(edition)
+    path = PROCESSED_DIR / filename
     if not path.is_file():
-        st.warning(f"No tidy file at `{path.name}`.")
+        st.warning(f"No tidy file at `{filename}` in `{PROCESSED_DIR}`.")
         st.code(
             "python ons_housebuilding_la_etl.py --edition "
             + edition
@@ -62,8 +57,8 @@ def main() -> None:
         )
         return
 
-    df = load_table(str(path))
-    st.sidebar.success(f"Loaded `{path.name}` ({len(df):,} rows)")
+    df = load_table(filename)
+    st.sidebar.success(f"Loaded `{filename}` ({len(df):,} rows)")
 
     df = prepare_housebuilding_la_df(df)
 
