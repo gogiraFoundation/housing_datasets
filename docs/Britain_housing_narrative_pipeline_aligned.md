@@ -87,6 +87,37 @@ The housing debate gains clarity when claims are **scoped to a series, geography
 
 ## D. High-impact visualisations (data-backed)
 
+### Fixed mapping: Chart 1-6
+
+- **Chart 1:** UK + England FY starts trend (country tidy)  
+  **Chart 1 unavailable:** country financial-year trend data is missing.
+
+- **Chart 2:** LA affordability ratio distribution (histogram + threshold count)  
+  **Chart 2 unavailable:** joined affordability snapshot data is missing.
+
+- **Chart 3:** Regional median price bar (sorted)  
+  **Chart 3 unavailable:** regional median summary is missing.
+
+- **Chart 4:** Entry-gap scatter (delta 6a - delta 5a) by LA  
+  **Chart 4 unavailable:** entry-gap table is missing.
+
+- **Chart 5:** England rolling EPC C+ trend + latest regional spread  
+  **Trend unavailable.**  
+  **Regional spread unavailable.**
+
+- **Chart 6:** HPI vs PRPI indexed overlap (Great Britain)  
+  **Chart 6 unavailable:** overlapping HPI/PRPI index series is missing.
+
+### Interpretation rule
+
+Use: **is associated with**, **coincides with**, **is consistent with**, **in this snapshot**, **for this geography/period**.
+
+Avoid: **caused by**, **proves**, **driven primarily by** unless causal modeling is added.
+
+### How this fits the project
+
+This fixed mapping provides a stable chart contract for reporting: each chart slot is tied to a defined dataset dependency, and when that dependency is absent the narrative degrades gracefully to explicit "unavailable" messages instead of over-claiming. It keeps interpretation aligned to descriptive evidence in the current processed snapshot and preserves auditability across geographies and time definitions.
+
 1. **United Kingdom and England housing starts, annual financial year**  
    - **Data:** `ons_housebuilding_country_current_tidy.parquet`  
    - **Filter:** `measure == "started"`, `frequency == "annual_financial_year"`, `country_name` in `{"United Kingdom","England"}`  

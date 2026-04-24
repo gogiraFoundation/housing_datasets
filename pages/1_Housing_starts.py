@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 import altair as alt
 import pandas as pd
@@ -46,6 +49,28 @@ def load_tidy(processed_dir_str: str, sources_snapshot: str) -> tuple[pd.DataFra
     return None, None
 
 
+def _is_deployment_env() -> bool:
+    return any(
+        bool(os.environ.get(name))
+        for name in ("DEPLOYMENT", "RENDER", "RAILWAY_ENVIRONMENT", "STREAMLIT_SHARING_MODE")
+    )
+
+
+def _try_build_tidy_dataset() -> tuple[bool, str | None]:
+    """Best-effort build for deploy boots when tidy outputs are missing."""
+    script = Path(__file__).resolve().parents[1] / "uk_local_authority_housing_data.py"
+    if not script.is_file():
+        return False, f"Pipeline script not found: {script}"
+    cmd = [sys.executable, str(script)]
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode == 0:
+        return True, None
+    stderr = (proc.stderr or "").strip()
+    stdout = (proc.stdout or "").strip()
+    detail = stderr or stdout or f"exit code {proc.returncode}"
+    return False, detail
+
+
 def _sorted_years(series: pd.Series) -> list[str]:
     years = series.dropna().astype(str).unique().tolist()
     return sorted(years)
@@ -83,6 +108,19 @@ def main() -> None:
     df, source_name = load_tidy(str(PROCESSED_DIR), snap)
 
     if df is None:
+        build_error: str | None = None
+        if _is_deployment_env():
+            with st.spinner("No tidy dataset found. Building deployment parquet now..."):
+                built, build_error = _try_build_tidy_dataset()
+            if built:
+                snap = _tidy_sources_snapshot(PROCESSED_DIR)
+                df, source_name = load_tidy(str(PROCESSED_DIR), snap)
+                if df is not None:
+                    st.success("Built and loaded tidy housing starts data for deployment.")
+
+        if df is None:
+            if build_error:
+                st.warning(f"Auto-build attempt failed: {build_error}")
         st.warning("No tidy dataset found in `data/processed/`.")
         st.info(
             f"Run the pipeline from the repository root, for example:\n\n"
