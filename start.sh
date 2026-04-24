@@ -10,6 +10,7 @@
 #   ETL_PROFILE=full ./start.sh        # standard ETL + Census TS008 + processed_manifest (see scripts/run_etl_suite.py)
 #   ETL_WITH_JOINS=1 ./start.sh        # append join builders after the suite (needs prior outputs)
 #   ETL_CONTINUE_ON_ERROR=1 ./start.sh # run all suite steps even if one fails
+#   RUN_FORECAST_PLAYBOOK=1 ./start.sh # run all-regions forecast playbook before app start
 
 set -euo pipefail
 
@@ -59,6 +60,19 @@ if [[ "${ALLOW_EMPTY_PROCESSED:-0}" != "1" ]]; then
   "$PYTHON" scripts/ensure_processed_parquet.py
 else
   echo "[start] ALLOW_EMPTY_PROCESSED=1: skipping parquet presence check"
+fi
+
+run_forecast_playbook=0
+if [[ "${RUN_FORECAST_PLAYBOOK:-0}" == "1" ]]; then
+  run_forecast_playbook=1
+elif [[ "${DEPLOYMENT:-0}" == "1" || -n "${RENDER:-}" || -n "${RAILWAY_ENVIRONMENT:-}" ]]; then
+  # Default-on for common deployment environments.
+  run_forecast_playbook=1
+fi
+
+if [[ "$run_forecast_playbook" -eq 1 ]]; then
+  echo "[start] running all-regions forecast playbook"
+  "$PYTHON" scripts/forecast_playbook/run_forecast_playbook.py --edition "${FORECAST_EDITION:-march2026}" --all-regions
 fi
 
 GEO_FILE="$ROOT/data/geo/lad_uk_wgs84.geojson"

@@ -61,7 +61,7 @@ def main() -> None:
     p.add_argument("--horizon", type=int, default=3, help="Forecast horizon per window.")
     p.add_argument(
         "--models",
-        default="seasonal_naive,ets,sarimax,lagged_hgbr",
+        default="seasonal_naive,ets,sarimax,lagged_hgbr,autoarima_ets_ensemble",
         help="Comma-separated model names.",
     )
     p.add_argument("-o", "--output", type=Path, default=None, help="JSON report path (default: stdout dir).")
@@ -126,7 +126,13 @@ def main() -> None:
             stem = f"{stem}_{args.annual_rule}"
         out_path = processed_dir / f"{stem}.json"
 
-    report_meta = {**meta, "min_train": min_train, "horizon": args.horizon, "seasonal_period": sp}
+    report_meta = {
+        **meta,
+        "min_train": min_train,
+        "horizon": args.horizon,
+        "seasonal_period": sp,
+        "frequency": args.frequency,
+    }
     write_backtest_report(
         out_path,
         meta=report_meta,

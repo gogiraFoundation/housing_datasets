@@ -9,7 +9,7 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 
-from housing_analytics.ts_forecast import forecast_model
+from housing_analytics.ts_forecast import probabilistic_forecast_model
 from housing_analytics.ts_load import infer_seasonal_period, load_hpi_series, load_hpi_series_annual
 
 # Labels must match `ons_uk_hpi_monthly_*_1_tidy.parquet` geography column (sheet 1).
@@ -31,7 +31,9 @@ SHEET1_GEOGRAPHIES: tuple[str, ...] = (
     "Yorkshire and The Humber",
 )
 
-MODEL_NAMES: frozenset[str] = frozenset({"seasonal_naive", "ets", "sarimax", "lagged_hgbr"})
+MODEL_NAMES: frozenset[str] = frozenset(
+    {"seasonal_naive", "ets", "sarimax", "lagged_hgbr", "autoarima_ets_ensemble"}
+)
 
 
 def best_models_from_ts_backtest_json(
@@ -102,21 +104,42 @@ def end_horizon_pct_change(
     seasonal_period: int,
     horizon: int,
 ) -> dict[str, Any]:
-    """Train on full ``y``; return last level, forecast at end of horizon, and % change vs last."""
+    """Train on full ``y``; return end-horizon point + probabilistic changes."""
     y = np.asarray(y, dtype=float)
     if y.size == 0:
         return {"last_level": None, "forecast_end": None, "pct_change": None, "error": "empty_series"}
     last = float(y[-1])
     if not np.isfinite(last) or abs(last) < 1e-12:
         return {"last_level": last, "forecast_end": None, "pct_change": None, "error": "invalid_last_level"}
-    pred = forecast_model(y, model_name, seasonal_period=seasonal_period, horizon=horizon)
-    if pred is None or len(pred) < horizon:
+    bundle = probabilistic_forecast_model(y, model_name, seasonal_period=seasonal_period, horizon=horizon)
+    if bundle is None:
         return {"last_level": last, "forecast_end": None, "pct_change": None, "error": "forecast_failed"}
-    fe = float(pred[horizon - 1])
-    if not np.isfinite(fe):
+    fe = float(bundle["point"][horizon - 1])
+    p10 = float(bundle["p10"][horizon - 1])
+    p50 = float(bundle["p50"][horizon - 1])
+    p90 = float(bundle["p90"][horizon - 1])
+    lower = float(bundle["lower"][horizon - 1])
+    upper = float(bundle["upper"][horizon - 1])
+    if not np.isfinite(fe) or not np.isfinite(p10) or not np.isfinite(p50) or not np.isfinite(p90):
         return {"last_level": last, "forecast_end": None, "pct_change": None, "error": "forecast_failed"}
     pct = (fe / last - 1.0) * 100.0
-    return {"last_level": last, "forecast_end": fe, "pct_change": float(pct), "error": None}
+    pct_p10 = (p10 / last - 1.0) * 100.0
+    pct_p50 = (p50 / last - 1.0) * 100.0
+    pct_p90 = (p90 / last - 1.0) * 100.0
+    return {
+        "last_level": last,
+        "forecast_end": fe,
+        "pct_change": float(pct),
+        "forecast_end_p10": p10,
+        "forecast_end_p50": p50,
+        "forecast_end_p90": p90,
+        "forecast_end_lower": lower,
+        "forecast_end_upper": upper,
+        "pct_change_p10": float(pct_p10),
+        "pct_change_p50": float(pct_p50),
+        "pct_change_p90": float(pct_p90),
+        "error": None,
+    }
 
 
 def forward_forecast_hpi_levels(

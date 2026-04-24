@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +33,7 @@ from ons_median_price_admin_config import EXISTING_DATASET_PAGE, MEDIAN_PRICE_EX
 from ons_price_earnings_ratio_config import DATASET_PAGE as PE_DATASET_PAGE, PRICE_EARNINGS_RATIO_EDITIONS
 from ons_uk_hpi_monthly_config import DATASET_PAGE as HPI_DATASET_PAGE, UK_HPI_MONTHLY_EDITIONS
 from streamlit_io import PROCESSED_DIR
-from streamlit_page_helpers import ogl_attribution_expander
+from streamlit_page_helpers import ogl_attribution_expander, render_missing_or_empty
 
 
 def _select_index(options: list[str], *, default_key: str) -> int:
@@ -124,6 +125,22 @@ def _render_table_caps(df: pd.DataFrame, *, cap: int = 15) -> None:
             st.dataframe(df.head(50), width=ST_WIDTH, height=min(600, 120 + 26 * min(50, len(df))))
 
 
+def _parse_inputs_snapshot(snapshot: str) -> dict[str, tuple[int, int]]:
+    out: dict[str, tuple[int, int]] = {}
+    for token in str(snapshot).split("|"):
+        parts = token.split(":")
+        if len(parts) != 3:
+            continue
+        name, mtime_ns, size = parts
+        if mtime_ns == "missing":
+            continue
+        try:
+            out[name] = (int(mtime_ns), int(size))
+        except ValueError:
+            continue
+    return out
+
+
 def main() -> None:
     st.set_page_config(page_title="Housing insights briefing", layout="wide")
     st.title("Housing insights briefing")
@@ -179,6 +196,20 @@ def main() -> None:
             disabled=(pe_win == "anchor"),
         )
         st.session_state.insights_horizon_years = int(hz)
+        top_n = st.radio(
+            "Top N rows/charts (LA-heavy views)",
+            options=(10, 25, 50),
+            index=1,
+            horizontal=True,
+        )
+        quick_regions = tuple(
+            st.multiselect(
+                "Quick region filter (charts/tables only)",
+                options=sorted(REGION_COLOR_DOMAIN),
+                default=[],
+                help="Optional extra filter on top of preset. Leave empty to keep all preset regions.",
+            )
+        )
 
         st.subheader("Data vintages")
         _pe_opts = list(PRICE_EARNINGS_RATIO_EDITIONS.keys())
@@ -200,18 +231,6 @@ def main() -> None:
             index=_select_index(_hb_la_opts, default_key="fye_march2025"),
             format_func=lambda k: HOUSEBUILDING_LA_EDITIONS[k].label,
         )
-        hb_country_ed = st.selectbox(
-            "House building (country)",
-            options=_hb_c_opts,
-            index=_select_index(_hb_c_opts, default_key="current"),
-            format_func=lambda k: HOUSEBUILDING_COUNTRY_EDITIONS[k].label,
-        )
-        hpi_ed = st.selectbox(
-            "UK HPI monthly (optional)",
-            options=_hpi_opts,
-            index=_select_index(_hpi_opts, default_key="march2026"),
-            format_func=lambda k: UK_HPI_MONTHLY_EDITIONS[k].label,
-        )
         median_ed = st.selectbox(
             "Median price admin (watchlist)",
             options=_med_opts,
@@ -224,12 +243,26 @@ def main() -> None:
             index=_select_index(_epc_opts, default_key="march2025"),
             format_func=lambda k: EPC_EDITIONS[k].label,
         )
-        ee_ed = st.selectbox(
-            "Energy efficiency rolling",
-            options=_ee_opts,
-            index=_select_index(_ee_opts, default_key="march2025"),
-            format_func=lambda k: EE_FIVEYEAR_EDITIONS[k].label,
-        )
+        with st.expander("Advanced/optional vintages", expanded=False):
+            st.caption("These vintages are tracked for provenance but do not currently drive hero KPIs on this page.")
+            hb_country_ed = st.selectbox(
+                "House building (country)",
+                options=_hb_c_opts,
+                index=_select_index(_hb_c_opts, default_key="current"),
+                format_func=lambda k: HOUSEBUILDING_COUNTRY_EDITIONS[k].label,
+            )
+            hpi_ed = st.selectbox(
+                "UK HPI monthly",
+                options=_hpi_opts,
+                index=_select_index(_hpi_opts, default_key="march2026"),
+                format_func=lambda k: UK_HPI_MONTHLY_EDITIONS[k].label,
+            )
+            ee_ed = st.selectbox(
+                "Energy efficiency rolling",
+                options=_ee_opts,
+                index=_select_index(_ee_opts, default_key="march2025"),
+                format_func=lambda k: EE_FIVEYEAR_EDITIONS[k].label,
+            )
 
     snap = _insights_inputs_snapshot_mtiles(
         str(PROCESSED_DIR),
@@ -264,6 +297,29 @@ def main() -> None:
         f"**Scope:** {meta['preset_label']} · workplace-based earnings where used · "
         f"**Data** loaded from `data/processed/`. {meta['horizon_label']} {meta['editions']}"
     )
+    readiness = payload.get("data_readiness") or {}
+    if isinstance(readiness, dict):
+        st.caption(
+            "Data readiness: "
+            f"required {int(readiness.get('required_loaded', 0))}/{int(readiness.get('required_total', 0))} · "
+            f"active {int(readiness.get('active_loaded', 0))}/{int(readiness.get('active_total', 0))} · "
+            f"optional {int(readiness.get('optional_loaded', 0))}/{int(readiness.get('optional_total', 0))}"
+        )
+    sigs = _parse_inputs_snapshot(snap)
+    fresh_keys = [
+        f"ons_price_earnings_ratio_{pe_ed}_5c_tidy.parquet",
+        f"ons_housebuilding_la_{hb_la_ed}_tidy.parquet",
+        f"ons_epc_bands_{epc_ed}_1a_tidy.parquet",
+    ]
+    fresh_bits: list[str] = []
+    for key in fresh_keys:
+        rec = sigs.get(key)
+        if rec is None:
+            continue
+        ts = datetime.fromtimestamp(rec[0] / 1_000_000_000, tz=timezone.utc).strftime("%Y-%m-%d")
+        fresh_bits.append(f"`{key}` ({ts})")
+    if fresh_bits:
+        st.caption("Freshness (mtime UTC): " + " · ".join(fresh_bits))
     st.divider()
 
     c1, c2, c3, c4 = st.columns(4)
@@ -315,13 +371,7 @@ def main() -> None:
 
     t1, t2, t3, t4, t5 = st.tabs(list(tab_labels.values()))
 
-    def _warn_missing(tab_key: str) -> None:
-        miss = payload["missing"].get(tab_key) or []
-        if miss:
-            st.warning(f"Missing file(s) for this tab: {', '.join(miss)}")
-
     with t1:
-        _warn_missing("affordability")
         st.caption(
             "Explore underlying series on **Median price (admin)** and **Price / earnings ratio** "
             "(sidebar multipage)."
@@ -335,6 +385,8 @@ def main() -> None:
                 "- `pages/14_House_price_earnings_ratio.py`"
             )
         rdf = tables.get("affordability_region")
+        if quick_regions and isinstance(rdf, pd.DataFrame) and not rdf.empty:
+            rdf = rdf[rdf["region"].isin(quick_regions)]
         if isinstance(rdf, pd.DataFrame) and not rdf.empty:
             st.markdown("**By region** (median of LAs in scope)")
             ch_r = (
@@ -350,10 +402,19 @@ def main() -> None:
             )
             st.altair_chart(ch_r, width=ST_WIDTH)
         df = tables["affordability"]
-        if not df.empty:
+        if quick_regions and not df.empty:
+            df = df[df["region"].isin(quick_regions)]
+        blocked = render_missing_or_empty(
+            payload["missing"],
+            "affordability",
+            is_empty=df.empty and (not isinstance(rdf, pd.DataFrame) or rdf.empty),
+            empty_message="No rows for current selection. Affordability charts need tables 5a-5c for the selected horizon.",
+        )
+        if not blocked and not df.empty:
             with st.expander("Local authorities (same horizon)", expanded=False):
+                top_df = df.sort_values("delta_ratio", ascending=False).head(int(top_n))
                 ch = (
-                    alt.Chart(df)
+                    alt.Chart(top_df)
                     .mark_circle(size=70, opacity=0.75)
                     .encode(
                         x=alt.X("delta_median_price:Q", title="Δ Median house price (£)"),
@@ -364,26 +425,34 @@ def main() -> None:
                     .properties(height=380)
                 )
                 st.altair_chart(ch, width=ST_WIDTH)
-                _render_table_caps(df.sort_values("delta_ratio", ascending=False))
-        elif not isinstance(rdf, pd.DataFrame) or rdf.empty:
-            st.info("Affordability charts need tables 5a–5c for the selected horizon.")
+                _render_table_caps(df.sort_values("delta_ratio", ascending=False), cap=int(top_n))
         with st.expander("Method & caveats"):
             st.markdown(
                 "- House prices use year-ending-September rolling periods; earnings are ASHE workplace gross for a calendar year.\n"
                 "- England & Wales local authorities only where published.\n"
                 "- Colours follow a fixed regional palette so charts stay comparable across presets."
             )
-        _render_tab_findings(payload, "affordability", title="Key findings — overview (all themes)")
+        st.subheader("Executive summary")
+        for line in payload.get("findings_overview") or []:
+            st.markdown(f"- {line}")
+        _render_tab_findings(payload, "affordability", title="Key findings — affordability")
 
     with t2:
-        _warn_missing("entry")
         st.caption(
             "Entry pressure is **not** an ONS FTB definition. "
             "Optional watchlist lines use HPSSA table 2a (`pages/12_Median_price_admin.py`)."
         )
         edf = tables["entry"]
-        if not edf.empty:
-            top = edf.head(25)
+        if quick_regions and not edf.empty:
+            edf = edf[edf["region"].isin(quick_regions)]
+        blocked = render_missing_or_empty(
+            payload["missing"],
+            "entry",
+            is_empty=edf.empty,
+            empty_message="No rows for current selection. Entry chart needs tables 5a and 6a.",
+        )
+        if not blocked and not edf.empty:
+            top = edf.head(int(top_n))
             ch = (
                 alt.Chart(top)
                 .mark_bar()
@@ -396,9 +465,7 @@ def main() -> None:
                 .properties(height=min(520, 120 + 18 * len(top)))
             )
             st.altair_chart(ch, width=ST_WIDTH)
-        else:
-            st.info("Entry chart needs tables 5a and 6a.")
-        _render_table_caps(edf)
+        _render_table_caps(edf, cap=int(top_n))
         wl = payload.get("entry_watchlist")
         if not isinstance(wl, pd.DataFrame):
             wl = pd.DataFrame()
@@ -425,13 +492,20 @@ def main() -> None:
         _render_tab_findings(payload, "entry")
 
     with t3:
-        _warn_missing("regions")
         st.caption(
             "Regional **price/earnings ratios** (ONS table 1c) indexed to 100 in the first calendar year of the horizon. "
             "See `pages/14_House_price_earnings_ratio.py` for full charts."
         )
         rdf = tables["regions"]
-        if not rdf.empty:
+        if quick_regions and not rdf.empty:
+            rdf = rdf[rdf["region"].isin(quick_regions)]
+        blocked = render_missing_or_empty(
+            payload["missing"],
+            "regions",
+            is_empty=rdf.empty,
+            empty_message="No rows for current selection. Regional series needs table 1c with region rows for the horizon.",
+        )
+        if not blocked and not rdf.empty:
             ch = (
                 alt.Chart(rdf)
                 .mark_line(point=True)
@@ -444,8 +518,6 @@ def main() -> None:
                 .properties(height=380)
             )
             st.altair_chart(ch, width=ST_WIDTH)
-        else:
-            st.info("Regional series needs table 1c with region rows for the horizon.")
         _render_table_caps(rdf.drop(columns=["index_norm"], errors="ignore"))
         with st.expander("Method & caveats"):
             st.markdown(
@@ -455,7 +527,6 @@ def main() -> None:
         _render_tab_findings(payload, "regions")
 
     with t4:
-        _warn_missing("supply")
         st.caption(
             f"{payload.get('supply_note', '')} "
             "Regime-style language belongs in captions only — not causal claims."
@@ -465,7 +536,15 @@ def main() -> None:
         except Exception:
             st.caption("Comparator: `pages/15_Housing_market_comparator.py`.")
         sdf = tables["supply"]
-        if not sdf.empty:
+        if quick_regions and not sdf.empty:
+            sdf = sdf[sdf["region"].isin(quick_regions)]
+        blocked = render_missing_or_empty(
+            payload["missing"],
+            "supply",
+            is_empty=sdf.empty,
+            empty_message="No rows for current selection. Supply bars need LA house-building Parquet.",
+        )
+        if not blocked and not sdf.empty:
             ch = (
                 alt.Chart(sdf)
                 .mark_bar()
@@ -478,9 +557,7 @@ def main() -> None:
                 .properties(height=120)
             )
             st.altair_chart(ch, width=ST_WIDTH)
-        else:
-            st.info("Supply bars need LA house-building Parquet.")
-        _render_table_caps(sdf)
+        _render_table_caps(sdf, cap=int(top_n))
         with st.expander("Method & caveats"):
             st.markdown(
                 "- Financial years differ from calendar years used in price/earnings tables.\n"
@@ -489,7 +566,6 @@ def main() -> None:
         _render_tab_findings(payload, "supply")
 
     with t5:
-        _warn_missing("energy")
         st.caption(
             "EPC band distribution (table 1a). Rolling energy efficiency statistics use different periods — "
             f"see [EE dataset]({EE_DATASET_PAGE})."
@@ -497,7 +573,15 @@ def main() -> None:
         raw = payload.get("energy_stack_raw")
         if not isinstance(raw, pd.DataFrame):
             raw = pd.DataFrame()
-        if not raw.empty:
+        if quick_regions and not raw.empty:
+            raw = raw[raw["country_or_region_name"].isin(quick_regions)]
+        blocked = render_missing_or_empty(
+            payload["missing"],
+            "energy",
+            is_empty=raw.empty,
+            empty_message="No rows for current selection. EPC stacked profile needs `ons_epc_bands_*_1a_tidy.parquet`.",
+        )
+        if not blocked and not raw.empty:
             ch = (
                 alt.Chart(raw)
                 .mark_bar()
@@ -510,10 +594,11 @@ def main() -> None:
                 .properties(height=min(520, 200 + 22 * raw["country_or_region_name"].nunique()))
             )
             st.altair_chart(ch, width=ST_WIDTH)
-        else:
-            st.info("EPC stacked profile needs `ons_epc_bands_*_1a_tidy.parquet`.")
         st.markdown("**Regional A–C share (ranking)**")
-        _render_table_caps(tables["energy"])
+        epc_table = tables["energy"]
+        if quick_regions and not epc_table.empty:
+            epc_table = epc_table[epc_table["region"].isin(quick_regions)]
+        _render_table_caps(epc_table, cap=int(top_n))
         jf = payload.get("joined_preview")
         if not isinstance(jf, pd.DataFrame):
             jf = pd.DataFrame()

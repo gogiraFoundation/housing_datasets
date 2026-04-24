@@ -16,6 +16,7 @@ from housing_analytics.forward_hpi import (
     best_models_from_ts_backtest_json,
     forward_forecast_hpi_levels,
 )
+from housing_analytics.scenario_forecast import scenario_forecast_growth
 
 from ons_uk_hpi_monthly_config import UK_HPI_MONTHLY_EDITIONS
 
@@ -67,10 +68,28 @@ def _hpi_backtest_rows() -> pd.DataFrame:
         summ = doc.get("summary") or {}
         best = summ.get("best_model_mae")
         mae_best = None
+        coverage_best = None
+        pinball_best = None
         for r in summ.get("summary_by_model", []):
             if r.get("model") == best and r.get("mae") is not None:
                 mae_best = float(r["mae"])
+                if r.get("coverage_p10_p90") is not None:
+                    coverage_best = float(r["coverage_p10_p90"])
+                if r.get("pinball_p50") is not None:
+                    pinball_best = float(r["pinball_p50"])
                 break
+        hz = meta.get("horizon")
+        h_bucket = None
+        try:
+            h_i = int(float(hz))
+            for b in (1, 3, 6, 12, 24):
+                if h_i <= b:
+                    h_bucket = b
+                    break
+            if h_bucket is None:
+                h_bucket = 24
+        except (TypeError, ValueError):
+            h_bucket = None
         rows.append(
             {
                 "file": path.name,
@@ -79,12 +98,15 @@ def _hpi_backtest_rows() -> pd.DataFrame:
                 "dataset": meta.get("dataset"),
                 "edition": meta.get("edition"),
                 "horizon": meta.get("horizon"),
+                "horizon_bucket": h_bucket,
                 "seasonal_period": meta.get("seasonal_period"),
                 "min_train": meta.get("min_train"),
                 "annual_rule": meta.get("annual_rule"),
                 "n_windows": doc.get("n_windows"),
                 "best_model_mae": best,
                 "mae_best_model": mae_best,
+                "coverage_best_model_p10_p90": coverage_best,
+                "pinball_best_model_p50": pinball_best,
             }
         )
     if not rows:
@@ -186,6 +208,24 @@ def _render_regional_tab() -> None:
                     "English regions need the full sweep (nine regions plus countries/UK rows are separate files)."
                 )
     st.dataframe(show, width=ST_WIDTH, height=min(420, 38 * (max(len(show), 1) + 1)))
+    if not show.empty:
+        panel = (
+            sub.groupby("horizon_bucket", dropna=False)[
+                ["mae_best_model", "coverage_best_model_p10_p90", "pinball_best_model_p50"]
+            ]
+            .mean(numeric_only=True)
+            .reset_index()
+            .rename(
+                columns={
+                    "horizon_bucket": "horizon_bucket_max",
+                    "mae_best_model": "avg_mae",
+                    "coverage_best_model_p10_p90": "avg_coverage_p10_p90",
+                    "pinball_best_model_p50": "avg_pinball_p50",
+                }
+            )
+        )
+        st.subheader("Horizon panel metrics")
+        st.dataframe(panel, width=ST_WIDTH, hide_index=True)
 
     chart_df = show.dropna(subset=["mae_best_model", "geography"]).copy()
     if not chart_df.empty:
@@ -205,7 +245,7 @@ def _render_regional_tab() -> None:
         st.caption("No numeric MAE for the current filters (empty windows or missing `summary_by_model`).")
 
 
-_MODEL_CHOICES = ("seasonal_naive", "ets", "sarimax", "lagged_hgbr")
+_MODEL_CHOICES = ("seasonal_naive", "ets", "sarimax", "lagged_hgbr", "autoarima_ets_ensemble")
 _SHEET_LABELS = {
     "1": "Index (ONS HPI)",
     "2": "Average price (£)",
@@ -248,6 +288,9 @@ def _forward_forecast_table(
                         "pct_change": None,
                         "last_level": None,
                         "forecast_end": None,
+                        "forecast_end_p10": None,
+                        "forecast_end_p50": None,
+                        "forecast_end_p90": None,
                         "n_obs": None,
                         "error": str(e),
                     }
@@ -261,11 +304,19 @@ def _forward_forecast_table(
                     "pct_change": r.get("pct_change"),
                     "last_level": r.get("last_level"),
                     "forecast_end": r.get("forecast_end"),
+                    "forecast_end_p10": r.get("forecast_end_p10"),
+                    "forecast_end_p50": r.get("forecast_end_p50"),
+                    "forecast_end_p90": r.get("forecast_end_p90"),
                     "n_obs": r.get("n_obs"),
                     "error": err,
                 }
             )
     return pd.DataFrame(rows)
+
+
+@st.cache_data(ttl=120)
+def _scenario_growth_table(processed_dir_str: str, level: str) -> tuple[pd.DataFrame, dict]:
+    return scenario_forecast_growth(Path(processed_dir_str), level=level)
 
 
 def _render_forward_tab() -> None:
@@ -389,7 +440,17 @@ def _render_forward_tab() -> None:
         st.caption(price_caption)
 
         disp = level_df[
-            ["geography", "model", "last_level", "forecast_end", "pct_change", "n_obs"]
+            [
+                "geography",
+                "model",
+                "last_level",
+                "forecast_end",
+                "forecast_end_p10",
+                "forecast_end_p50",
+                "forecast_end_p90",
+                "pct_change",
+                "n_obs",
+            ]
         ].copy()
         last_h = "Last observed (£)" if sheet == "2" else "Last observed (index)" if sheet == "1" else "Last observed"
         pred_h = f"Predicted after {step_label}" + (" (£)" if sheet == "2" else " (index)" if sheet == "1" else "")
@@ -398,6 +459,9 @@ def _render_forward_tab() -> None:
                 "last_level": last_h,
                 "forecast_end": pred_h,
                 "pct_change": "% change vs last",
+                "forecast_end_p10": "P10",
+                "forecast_end_p50": "P50",
+                "forecast_end_p90": "P90",
                 "n_obs": "Observations",
             }
         )
@@ -407,6 +471,9 @@ def _render_forward_tab() -> None:
             last_h: st.column_config.NumberColumn(last_h, format=fmt_last),
             pred_h: st.column_config.NumberColumn(pred_h, format=fmt_pred),
             "% change vs last": st.column_config.NumberColumn("% change vs last", format="%.2f"),
+            "P10": st.column_config.NumberColumn("P10", format=fmt_pred),
+            "P50": st.column_config.NumberColumn("P50", format=fmt_pred),
+            "P90": st.column_config.NumberColumn("P90", format=fmt_pred),
             "Observations": st.column_config.NumberColumn("Observations", format="%d"),
         }
         st.dataframe(
@@ -427,6 +494,8 @@ def _render_forward_tab() -> None:
             .encode(
                 x=alt.X("geography:N", title="Geography", sort=list(geographies)),
                 y=alt.Y("forecast_end:Q", title=y_title),
+                yError=alt.YError("forecast_end_p90:Q"),
+                yError2=alt.YError2("forecast_end_p10:Q"),
                 color=alt.Color("model:N", title="Model"),
                 xOffset=alt.XOffset("model:N"),
                 tooltip=["geography", "model", "last_level", "forecast_end", "pct_change", "n_obs"],
@@ -473,6 +542,27 @@ def _render_forward_tab() -> None:
     if "error" in show.columns:
         show["error"] = show["error"].apply(lambda x: "" if x is None or (isinstance(x, float) and pd.isna(x)) else str(x))
     st.dataframe(show, width=ST_WIDTH)
+
+    st.subheader("Scenario forecaster (driver-based)")
+    sc1, sc2 = st.columns(2)
+    with sc1:
+        scenario_level = st.selectbox("Scenario geography level", options=("region", "la"), index=0)
+    sdf, scen_meta = _scenario_growth_table(str(PROCESSED_DIR.resolve()), scenario_level)
+    with sc2:
+        if bool(scen_meta.get("target_is_proxy")):
+            st.caption(
+                "Outputs baseline/low/high score scenarios from available drivers "
+                "(proxy mode because growth targets are unavailable in the snapshot)."
+            )
+        else:
+            st.caption(
+                "Outputs baseline/low/high growth scenarios using supply, EPC/EE, "
+                "PRPI-HPI spread, vacancy and affordability features."
+            )
+    if sdf.empty:
+        st.info("Scenario snapshot input is missing; run `joins/build_la_housing_market_snapshot.py` to generate joined tables.")
+    else:
+        st.dataframe(sdf, width=ST_WIDTH, hide_index=True)
 
     with st.expander("How to read this"):
         st.markdown(
@@ -592,6 +682,8 @@ def _render_ts_tab(ts_files: list[Path]) -> None:
 
         st.subheader("Error metrics by model")
         st.dataframe(sdf, width=ST_WIDTH)
+        if "coverage_p10_p90" in sdf.columns:
+            st.caption("Calibration: `coverage_p10_p90` should be close to 0.8 for well-calibrated P10/P90 bands.")
         melt = sdf.melt(
             id_vars=["model"],
             value_vars=["mae", "rmse", "mape", "mase_vs_naive"],

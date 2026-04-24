@@ -13,6 +13,8 @@ from housing_analytics.ts_forecast import (
     forecast_model,
     metrics,
     mase,
+    pinball_loss,
+    probabilistic_forecast_model,
     rolling_seasonal_naive_predict,
 )
 
@@ -43,6 +45,21 @@ def rolling_origin_backtest(
             if pred is None or np.any(~np.isfinite(pred)):
                 continue
             met = metrics(y_true, pred)
+            prob = probabilistic_forecast_model(
+                y_train,
+                model_name,
+                seasonal_period=seasonal_period,
+                horizon=horizon,
+            )
+            if prob is not None:
+                p10 = np.asarray(prob["p10"], dtype=float)
+                p50 = np.asarray(prob["p50"], dtype=float)
+                p90 = np.asarray(prob["p90"], dtype=float)
+                with np.errstate(invalid="ignore"):
+                    met["coverage_p10_p90"] = float(np.nanmean((y_true >= p10) & (y_true <= p90)))
+                met["pinball_p10"] = pinball_loss(y_true, p10, 0.10)
+                met["pinball_p50"] = pinball_loss(y_true, p50, 0.50)
+                met["pinball_p90"] = pinball_loss(y_true, p90, 0.90)
             met["model"] = model_name
             met["origin"] = t
             met["horizon"] = horizon
@@ -53,7 +70,18 @@ def rolling_origin_backtest(
     summary_by_model: list[dict[str, Any]] = []
     if not df.empty:
         summary_by_model = (
-            df.groupby("model", as_index=False)[["mae", "rmse", "mape", "mase_vs_naive"]]
+            df.groupby("model", as_index=False)[
+                [
+                    "mae",
+                    "rmse",
+                    "mape",
+                    "mase_vs_naive",
+                    "coverage_p10_p90",
+                    "pinball_p10",
+                    "pinball_p50",
+                    "pinball_p90",
+                ]
+            ]
             .mean()
             .to_dict(orient="records")
         )
@@ -76,6 +104,22 @@ def write_backtest_report(
         if "mae" in sdf.columns and "model" in sdf.columns and sdf["mae"].notna().any():
             best_mae = str(sdf.loc[sdf["mae"].idxmin(), "model"])
     summary_out = {**summary, "best_model_mae": best_mae}
+    h_raw = meta.get("horizon")
+    h_int = int(h_raw) if h_raw is not None else None
+    horizon_bucket = None
+    if h_int is not None:
+        for b in (1, 3, 6, 12, 24):
+            if h_int <= b:
+                horizon_bucket = b
+                break
+        if horizon_bucket is None:
+            horizon_bucket = 24
+    summary_out["horizon_panel"] = {
+        "horizon": h_int,
+        "bucket": horizon_bucket,
+        "frequency": meta.get("frequency", "monthly"),
+        "summary_by_model": summary.get("summary_by_model", []),
+    }
     out = {
         "meta": meta,
         "summary": summary_out,

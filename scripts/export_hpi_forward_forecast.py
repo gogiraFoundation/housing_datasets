@@ -15,6 +15,7 @@ if str(_REPO) not in sys.path:
 
 from housing_analytics.forward_hpi import SHEET1_GEOGRAPHIES, forward_forecast_hpi_levels
 from housing_analytics.paths import PROCESSED_DIR
+from housing_analytics.scenario_forecast import scenario_forecast_growth
 
 
 def main() -> None:
@@ -27,8 +28,8 @@ def main() -> None:
     p.add_argument("--horizon", type=int, default=12)
     p.add_argument(
         "--models",
-        default="ets,sarimax",
-        help="Comma-separated model names (seasonal_naive,ets,sarimax,lagged_hgbr).",
+        default="ets,sarimax,autoarima_ets_ensemble",
+        help="Comma-separated model names (seasonal_naive,ets,sarimax,lagged_hgbr,autoarima_ets_ensemble).",
     )
     p.add_argument(
         "--geographies",
@@ -41,6 +42,12 @@ def main() -> None:
         type=Path,
         default=None,
         help="JSON path (default: data/processed/hpi_forward_forecast_<edition>_h<horizon>.json).",
+    )
+    p.add_argument(
+        "--scenario-level",
+        choices=("none", "region", "la"),
+        default="region",
+        help="Append driver-based baseline/low/high scenario output.",
     )
     args = p.parse_args()
 
@@ -90,6 +97,13 @@ def main() -> None:
         },
         "rows": rows,
     }
+    if args.scenario_level != "none":
+        scen, scen_meta = scenario_forecast_growth(processed, level=args.scenario_level)
+        payload["scenarios"] = {
+            "level": args.scenario_level,
+            "metadata": scen_meta,
+            "rows": scen.to_dict(orient="records"),
+        }
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

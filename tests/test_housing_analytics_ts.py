@@ -11,10 +11,12 @@ import pandas as pd
 from housing_analytics.ts_backtest import rolling_origin_backtest, write_backtest_report
 from housing_analytics.forward_hpi import end_horizon_pct_change
 from housing_analytics.ts_forecast import (
+    fit_predict_autoarima_ets_ensemble,
     fit_predict_ets,
     fit_predict_sarimax,
     forecast_model,
     metrics,
+    probabilistic_forecast_model,
     rolling_seasonal_naive_predict,
 )
 from housing_analytics.ts_load import aggregate_hpi_monthly_to_annual
@@ -67,6 +69,7 @@ def test_ets_sarimax_short_series():
     y = np.linspace(10, 20, 40)
     assert fit_predict_ets(y, seasonal_period=12, horizon=2) is not None
     assert fit_predict_sarimax(y, seasonal_period=12, horizon=2) is not None
+    assert fit_predict_autoarima_ets_ensemble(y, seasonal_period=12, horizon=2) is not None
 
 
 def test_rolling_backtest_annual_frequency_smoke():
@@ -116,3 +119,14 @@ def test_write_backtest_report_best_model_mae(tmp_path: Path) -> None:
     write_backtest_report(p, meta={"dataset": "test"}, windows_df=win, summary=summary)
     doc = json.loads(p.read_text(encoding="utf-8"))
     assert doc["summary"]["best_model_mae"] == "b"
+
+
+def test_probabilistic_forecast_has_quantiles():
+    y = np.linspace(100.0, 150.0, 48)
+    out = probabilistic_forecast_model(y, "ets", seasonal_period=12, horizon=3)
+    assert out is not None
+    assert out["p10"].shape == (3,)
+    assert out["p50"].shape == (3,)
+    assert out["p90"].shape == (3,)
+    assert np.all(out["p10"] <= out["p50"])
+    assert np.all(out["p50"] <= out["p90"])

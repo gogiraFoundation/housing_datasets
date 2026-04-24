@@ -124,6 +124,12 @@ Short startup env vars for hosted deployments:
 - `ETL_WITH_JOINS=1` — include join builders in first-boot ETL (slower startup).
 - `ETL_CONTINUE_ON_ERROR=1` — keep running remaining ETL steps if one fails.
 
+Forecast playbook startup env vars:
+
+- `RUN_FORECAST_PLAYBOOK=1` — run `scripts/forecast_playbook/run_forecast_playbook.py --all-regions` during startup to pre-populate `data/processed/forecasts/<edition>/...`.
+- `FORECAST_EDITION=march2026` — edition passed to the playbook runner (default `march2026`).
+- Deployment auto-trigger — `start.sh` enables the all-regions forecast run automatically when `DEPLOYMENT=1` or when `RENDER` / `RAILWAY_ENVIRONMENT` is present.
+
 After deployment, check this directory contains files like `ons_housebuilding_la_<edition>_tidy.parquet`; Streamlit pages (including **House building — local authority**) read from this resolved directory.
 
 Optional wrapper with health checks and restart: [`run_dashboard.py`](run_dashboard.py).

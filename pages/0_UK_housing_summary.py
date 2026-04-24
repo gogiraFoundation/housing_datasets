@@ -143,6 +143,39 @@ def _latest_fy_period(sub: pd.DataFrame) -> str | None:
     return order[-1] if order else None
 
 
+def _build_hpi_prpi_overlap(root: Path) -> pd.DataFrame:
+    """Great Britain overlap, rebased to first overlapping month (100)."""
+    prpi_path = root / "ons_private_rental_index_v41_tidy.parquet"
+    hpi_path = root / "ons_uk_hpi_monthly_march2026_1_tidy.parquet"
+    if not prpi_path.is_file() or not hpi_path.is_file():
+        return pd.DataFrame()
+    prpi = load_processed_parquet(prpi_path.relative_to(root)).copy()
+    hpi = load_processed_parquet(hpi_path.relative_to(root)).copy()
+    prpi = prpi[
+        (prpi["variable"].astype(str) == "index")
+        & (prpi["geography_name"].astype(str) == "Great Britain")
+    ].copy()
+    hpi = hpi[hpi["geography"].astype(str) == "Great Britain"].copy()
+    if prpi.empty or hpi.empty:
+        return pd.DataFrame()
+    prpi["period"] = pd.to_datetime(prpi["month_label"].astype(str), format="%b-%y", errors="coerce")
+    hpi["period"] = pd.to_datetime(hpi["time_period"].astype(str), format="%b %Y", errors="coerce")
+    prpi["value"] = pd.to_numeric(prpi["value"], errors="coerce")
+    hpi["value"] = pd.to_numeric(hpi["value"], errors="coerce")
+    prpi = prpi.dropna(subset=["period", "value"])[["period", "value"]].rename(columns={"value": "prpi_index"})
+    hpi = hpi.dropna(subset=["period", "value"])[["period", "value"]].rename(columns={"value": "hpi_index"})
+    joined = prpi.merge(hpi, on="period", how="inner").sort_values("period")
+    if joined.empty:
+        return pd.DataFrame()
+    base = joined.iloc[0]
+    if float(base["prpi_index"]) == 0 or float(base["hpi_index"]) == 0:
+        return pd.DataFrame()
+    joined["prpi_rebased"] = joined["prpi_index"] / float(base["prpi_index"]) * 100.0
+    joined["hpi_rebased"] = joined["hpi_index"] / float(base["hpi_index"]) * 100.0
+    joined["hpi_minus_prpi"] = joined["hpi_rebased"] - joined["prpi_rebased"]
+    return joined
+
+
 @st.cache_data
 def _summary_payload(
     processed_root: str,
@@ -166,7 +199,77 @@ def _summary_payload(
     ``inputs_snapshot`` is part of the ``@st.cache_data`` key (must not use a leading underscore — Streamlit excludes those from hashing).
     """
     root = Path(processed_root)
-    bullets: list[str] = []
+    insight_cards = [
+        {
+            "headline": "Supply has not consistently returned to pre-crisis strength.",
+            "evidence": (
+                'ons_housebuilding_country_current_tidy.parquet (measure="started", '
+                'frequency="annual_financial_year").'
+            ),
+            "caveat": (
+                "Financial-year starts are flow measures; do not compare directly to calendar-year "
+                "affordability without period labeling."
+            ),
+        },
+        {
+            "headline": "Affordability stress is concentrated, not uniform.",
+            "evidence": (
+                "joined_la_housing_market_snapshot.parquet using pe_affordability_ratio "
+                "(e.g., count LAs above 10x)."
+            ),
+            "caveat": (
+                "Workplace-based ratio follows ONS workplace earnings framework "
+                "(tables 5a-5c), not residence income."
+            ),
+        },
+        {
+            "headline": "Regional house price disparities remain large.",
+            "evidence": "Lane A regional summaries from median_price_existing_gbp.",
+            "caveat": (
+                "This is a median-of-LA medians in current join context, not population-weighted "
+                "regional median."
+            ),
+        },
+        {
+            "headline": "Entry-level pressure can exceed headline median pressure in many areas.",
+            "evidence": "Delta comparison logic (6a vs 5a) in housing_analytics/insights_briefing.py.",
+            "caveat": "Proxy for lower-end pressure; not an official first-time-buyer metric.",
+        },
+        {
+            "headline": "Energy efficiency has improved over rolling windows.",
+            "evidence": (
+                'ons_ee_fiveyear_*_1c_tidy.parquet (measure_breakdown="All"), EPC C+ trend.'
+            ),
+            "caveat": (
+                "Overlapping windows smooth short-term movements; not annual change series."
+            ),
+        },
+        {
+            "headline": "Energy performance differs materially by region.",
+            "evidence": (
+                "region_housing_market_snapshot.parquet (epc_pct_bands_abc, ee_epc_c_plus_pct)."
+            ),
+            "caveat": (
+                "Region-level signal only in this lane; avoid LA-level EPC band claims."
+            ),
+        },
+        {
+            "headline": "HPI has outgrown PRPI over overlapping periods in selected geographies.",
+            "evidence": (
+                "housing_analytics/hpi_prpi_callout.py indexed spread (hpi_minus_prpi logic)."
+            ),
+            "caveat": (
+                "Rebased index spread, not sterling housing-cost comparison."
+            ),
+        },
+        {
+            "headline": "Some regions combine weaker supply with stronger affordability strain.",
+            "evidence": (
+                "Lane B cross-metric comparison (region_supply_starts plus affordability-linked context)."
+            ),
+            "caveat": "Descriptive co-movement only; no causal inference.",
+        },
+    ]
 
     path_country = root / f"ons_housebuilding_country_{hb_country_ed}_tidy.parquet"
     path_la = root / f"ons_housebuilding_la_{hb_la_ed}_tidy.parquet"
@@ -176,7 +279,8 @@ def _summary_payload(
     path_bundled_csv = root / "uk_housing_starts_tidy.csv"
 
     out: dict[str, Any] = {
-        "bullets": bullets,
+        "bullets": [],
+        "insight_cards": insight_cards,
         "country_plot": None,
         "latest_country_period": None,
         "country_missing": None,
@@ -205,7 +309,13 @@ def _summary_payload(
         "epc_ee_scatter": None,
         "manifest_preview": None,
         "hpi_prpi_callout": None,
+        "chart2_affordability": None,
+        "chart3_regional_median": None,
+        "chart4_entry_gap": None,
+        "chart5_epc_spread": None,
+        "chart6_hpi_prpi": None,
     }
+    bullets: list[str] = out["bullets"]
 
     # Country
     if not path_country.is_file():
@@ -524,6 +634,33 @@ def _summary_payload(
                 bullets.append(f"Latest **HPI annual change** ({r['time_period']}): **{float(r['value']):+.2f}%**.")
 
     out["hpi_prpi_callout"] = buy_vs_rent_spread_caption(root)
+    out["chart6_hpi_prpi"] = _build_hpi_prpi_overlap(root)
+
+    joined_path = root / "joined_la_housing_market_snapshot.parquet"
+    if joined_path.is_file():
+        joined = load_processed_parquet(joined_path.relative_to(root)).copy()
+        if "pe_affordability_ratio" in joined.columns:
+            joined["pe_affordability_ratio"] = pd.to_numeric(joined["pe_affordability_ratio"], errors="coerce")
+            out["chart2_affordability"] = joined.dropna(subset=["pe_affordability_ratio"])
+        if "region_name" in joined.columns and "median_price_existing_gbp" in joined.columns:
+            joined["median_price_existing_gbp"] = pd.to_numeric(joined["median_price_existing_gbp"], errors="coerce")
+            reg_med = (
+                joined.dropna(subset=["region_name", "median_price_existing_gbp"])
+                .groupby("region_name", as_index=False)["median_price_existing_gbp"]
+                .median()
+                .rename(columns={"region_name": "region"})
+            )
+            if not reg_med.empty:
+                out["chart3_regional_median"] = reg_med.sort_values("median_price_existing_gbp", ascending=False)
+
+    brief_snap = _briefing_inputs_snapshot(root)
+    brief_payload = _uk_summary_briefing_payload(str(root), brief_snap)
+    entry_df = brief_payload.get("tables", {}).get("entry")
+    if isinstance(entry_df, pd.DataFrame) and not entry_df.empty:
+        out["chart4_entry_gap"] = entry_df.dropna(subset=["entry_gap"]).copy()
+    epc_rank = brief_payload.get("tables", {}).get("energy")
+    if isinstance(epc_rank, pd.DataFrame) and not epc_rank.empty:
+        out["chart5_epc_spread"] = epc_rank.copy()
 
     manifest_path = root / "processed_manifest.json"
     if manifest_path.is_file():
@@ -569,22 +706,183 @@ def _summary_payload(
     return out
 
 
-def _render_overview_tab(
-    bullets: list[str],
-    manifest_preview: pd.DataFrame | None,
-    hpi_prpi_callout: str | None,
-) -> None:
+def _render_overview_tab(payload: dict[str, Any]) -> None:
     st.markdown(
-        "This page summarises **several ONS publications** and optional bundled inputs. Each tab uses the "
-        "periods and editions selected in the sidebar. The views are **not** a single harmonised time series; "
-        "read tab captions before comparing numbers."
+        "This page is a Key Insights registry for UK housing pressures and market context. "
+        "It highlights defensible descriptive findings tied to named datasets and period definitions. "
+        "Use it to communicate evidence-led observations before moving into lane-specific tabs."
     )
-    st.markdown(
-        "**Coverage.** House-building statistics are **UK-wide** (country and local authority). "
-        "EPC bands and five-year rolling energy metrics are **England and Wales only**. "
-        "ONS **country** tables give the official **England** national total; the **local authority** dataset "
-        "splits England into **regions** (e.g. London, North West) and is not comparable to that national total."
+
+    st.subheader("Key Insights")
+    cards = payload.get("insight_cards") or []
+    for i, card in enumerate(cards, start=1):
+        with st.container(border=True):
+            st.markdown(f"**Insight {i}**")
+            st.markdown(f"**Headline**  \n{card['headline']}")
+            st.markdown(f"**Evidence**  \n{card['evidence']}")
+            st.markdown(f"**Caveat**  \n{card['caveat']}")
+
+    st.subheader("Strong chart set for credibility")
+    st.caption("Fixed mapping: Chart 1-6")
+
+    st.markdown("**Chart 1: UK + England FY starts trend (country tidy)**")
+    c1 = payload.get("country_ts")
+    if c1 is None or c1.empty:
+        st.info("Chart 1 unavailable: country financial-year trend data is missing.")
+    else:
+        c1 = c1[c1["measure"].astype(str).str.lower() == "started"].copy()
+        if not c1.empty:
+            c1 = c1[c1["country_name"].isin(["United Kingdom", "England"])]
+            if c1.empty:
+                st.info("Chart 1 unavailable: no UK/England starts rows in current edition.")
+            else:
+                order_p = preferred_period_order(c1["period"])
+                ch1 = (
+                    alt.Chart(c1)
+                    .mark_line(point=True)
+                    .encode(
+                        x=alt.X("period:N", sort=order_p, title="Financial year"),
+                        y=alt.Y("dwellings:Q", title="Starts (dwellings)"),
+                        color=alt.Color("country_name:N", title="Geography"),
+                        tooltip=["country_name", "period", alt.Tooltip("dwellings", format=",.0f")],
+                    )
+                    .properties(height=300)
+                )
+                st.altair_chart(ch1, width=ST_WIDTH)
+
+    st.markdown("**Chart 2: LA affordability ratio distribution (histogram + threshold count)**")
+    c2 = payload.get("chart2_affordability")
+    if c2 is None or c2.empty:
+        st.info("Chart 2 unavailable: joined affordability snapshot data is missing.")
+    else:
+        c2 = c2.dropna(subset=["pe_affordability_ratio"]).copy()
+        threshold_n = int((c2["pe_affordability_ratio"] > 10).sum())
+        st.caption(f"LAs above 10x affordability ratio: **{threshold_n}**.")
+        ch2 = (
+            alt.Chart(c2)
+            .mark_bar()
+            .encode(
+                x=alt.X("pe_affordability_ratio:Q", bin=alt.Bin(maxbins=30), title="Affordability ratio"),
+                y=alt.Y("count():Q", title="Local authority count"),
+                tooltip=[alt.Tooltip("count():Q", title="LAs")],
+            )
+            .properties(height=260)
+        )
+        st.altair_chart(ch2, width=ST_WIDTH)
+
+    st.markdown("**Chart 3: Regional median price bar (sorted)**")
+    c3 = payload.get("chart3_regional_median")
+    if c3 is None or c3.empty:
+        st.info("Chart 3 unavailable: regional median summary is missing.")
+    else:
+        ch3 = (
+            alt.Chart(c3)
+            .mark_bar(color="#4c78a8")
+            .encode(
+                x=alt.X("median_price_existing_gbp:Q", title="Median price (GBP)"),
+                y=alt.Y("region:N", sort="-x", title=None),
+                tooltip=["region", alt.Tooltip("median_price_existing_gbp", format=",.0f")],
+            )
+            .properties(height=min(420, 26 * max(6, len(c3))))
+        )
+        st.altair_chart(ch3, width=ST_WIDTH)
+
+    st.markdown("**Chart 4: Entry-gap scatter (Δ6a - Δ5a) by LA**")
+    c4 = payload.get("chart4_entry_gap")
+    if c4 is None or c4.empty:
+        st.info("Chart 4 unavailable: entry-gap table is missing.")
+    else:
+        ch4 = (
+            alt.Chart(c4)
+            .mark_circle(size=55, opacity=0.75)
+            .encode(
+                x=alt.X("delta_median_price:Q", title="Δ5a median price"),
+                y=alt.Y("entry_gap:Q", title="Entry gap (Δ6a - Δ5a)"),
+                color=alt.Color("region:N", title="Region"),
+                tooltip=[
+                    "la_name",
+                    "region",
+                    alt.Tooltip("delta_median_price", format=",.0f"),
+                    alt.Tooltip("delta_lq_price", format=",.0f"),
+                    alt.Tooltip("entry_gap", format=",.0f"),
+                ],
+            )
+            .properties(height=320)
+        )
+        st.altair_chart(ch4, width=ST_WIDTH)
+
+    st.markdown("**Chart 5: England rolling EPC C+ trend + latest regional spread**")
+    c5_trend = payload.get("ee_trend_long")
+    c5_spread = payload.get("chart5_epc_spread")
+    cols5 = st.columns(2)
+    with cols5[0]:
+        if c5_trend is None or c5_trend.empty:
+            st.info("Trend unavailable.")
+        else:
+            eng = c5_trend[c5_trend["country_or_region_name"].astype(str) == "England"].copy()
+            if eng.empty:
+                st.info("England rolling trend unavailable.")
+            else:
+                order_rp = sorted(eng["rolling_period"].astype(str).unique().tolist(), key=_rolling_period_sort_key)
+                ch5a = (
+                    alt.Chart(eng)
+                    .mark_line(point=True, color="#54a24b")
+                    .encode(
+                        x=alt.X("rolling_period:N", sort=order_rp, title="Rolling period"),
+                        y=alt.Y("value:Q", title="EPC C+ (%)"),
+                        tooltip=["rolling_period", alt.Tooltip("value", format=".2f")],
+                    )
+                    .properties(height=280)
+                )
+                st.altair_chart(ch5a, width=ST_WIDTH)
+    with cols5[1]:
+        if c5_spread is None or c5_spread.empty:
+            st.info("Regional spread unavailable.")
+        else:
+            ch5b = (
+                alt.Chart(c5_spread)
+                .mark_bar(color="#72b7b2")
+                .encode(
+                    x=alt.X("epc_c_plus_pct:Q", title="EPC A-C (%)"),
+                    y=alt.Y("region:N", sort="-x", title=None),
+                    tooltip=["region", alt.Tooltip("epc_c_plus_pct", format=".1f")],
+                )
+                .properties(height=280)
+            )
+            st.altair_chart(ch5b, width=ST_WIDTH)
+
+    st.markdown("**Chart 6: HPI vs PRPI indexed overlap (Great Britain)**")
+    c6 = payload.get("chart6_hpi_prpi")
+    if c6 is None or c6.empty:
+        st.info("Chart 6 unavailable: overlapping HPI/PRPI index series is missing.")
+    else:
+        c6m = c6.melt(
+            id_vars=["period"],
+            value_vars=["hpi_rebased", "prpi_rebased"],
+            var_name="series",
+            value_name="value",
+        )
+        c6m["series"] = c6m["series"].map({"hpi_rebased": "HPI rebased", "prpi_rebased": "PRPI rebased"})
+        ch6 = (
+            alt.Chart(c6m)
+            .mark_line(point=False)
+            .encode(
+                x=alt.X("period:T", title="Month"),
+                y=alt.Y("value:Q", title="Indexed (first overlap month = 100)"),
+                color=alt.Color("series:N", title=None),
+                tooltip=["series", alt.Tooltip("value", format=".2f")],
+            )
+            .properties(height=320)
+        )
+        st.altair_chart(ch6, width=ST_WIDTH)
+
+    st.subheader("Interpretation rule")
+    st.info(
+        "Use: `is associated with`, `coincides with`, `is consistent with`, `in this snapshot`, "
+        "`for this geography/period`.\n\n"
+        "Avoid: `caused by`, `proves`, `driven primarily by` unless causal modeling is added."
     )
+
     st.subheader("How this fits the project")
     st.markdown(
         """
@@ -614,16 +912,12 @@ def _render_overview_tab(
 | **ML predictions & backtests** | Rolling HPI backtests, regional comparison, forward index change (exploratory), LA benchmark |
 """
     )
-    st.subheader("Key findings")
-    if bullets:
-        for b in bullets:
-            st.markdown(f"- {b}")
-    else:
-        st.info("Run ETL scripts so `data/processed/` contains the Parquet files used on the other tabs.")
+    hpi_prpi_callout = payload.get("hpi_prpi_callout")
     if hpi_prpi_callout:
         with st.expander("Buy vs rent (indexed — PRPI vs HPI)"):
             st.markdown(hpi_prpi_callout)
     st.subheader("Data freshness / build catalogue")
+    manifest_preview = payload.get("manifest_preview")
     if manifest_preview is None or manifest_preview.empty:
         st.caption("No `processed_manifest.json` detected. Run `python scripts/build_processed_manifest.py`.")
     else:
@@ -1124,15 +1418,13 @@ def main() -> None:
         include_epc_ee_scatter,
         inputs_snapshot=_inputs_snap,
     )
-    bullets: list[str] = payload["bullets"]
-
     tab_labels = ["Overview", "UK country supply", "Regions & local authorities", "Energy & EPC"]
     if include_bundled:
         tab_labels.append("Bundled starts")
     tabs = st.tabs(tab_labels)
 
     with tabs[0]:
-        _render_overview_tab(bullets, payload.get("manifest_preview"), payload.get("hpi_prpi_callout"))
+        _render_overview_tab(payload)
 
     with tabs[1]:
         _render_country_tab(payload, hb_country_ed, int(country_trend_years))

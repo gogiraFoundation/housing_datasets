@@ -139,4 +139,88 @@ The housing debate gains clarity when claims are **scoped to a series, geography
 
 ---
 
+## F. 10-year regional forecast playbook (concrete implementation)
+
+This section adds a reproducible playbook for seven forecast targets, with one fully worked regional example and a mirrored all-regions command.
+
+### F1. Input refresh and lane snapshots
+
+Run this first to ensure Lane A and Lane B snapshots are current:
+
+```bash
+python scripts/build_processed_manifest.py
+python joins/build_la_housing_market_snapshot.py --output-dir data/processed
+```
+
+Expected output:
+- `data/processed/joined_la_housing_market_snapshot.parquet`
+- `data/processed/region_housing_market_snapshot.parquet`
+
+### F2. Worked example: London
+
+Run all seven targets for London:
+
+```bash
+python scripts/forecast_playbook/run_forecast_playbook.py \
+  --edition march2026 \
+  --region "London"
+```
+
+Outputs (under `data/processed/forecasts/march2026/london/`):
+- `hpi_growth_predictions.csv` and `hpi_growth_metrics.json`
+- `affordability_pressure_predictions.csv` and `affordability_pressure_metrics.json`
+- `quantile_price_band_predictions.csv` and `quantile_price_band_metrics.json`
+- `divergence_risk_predictions.csv`, `divergence_risk_metrics.json`, `divergence_risk_calibration.json`
+- `supply_shortfall_predictions.csv`, `supply_shortfall_metrics.json`, `supply_shortfall_calibration.json`
+- `epc_adoption_predictions.csv` and `epc_adoption_metrics.json`
+- `vacancy_pressure_predictions.csv`, `vacancy_pressure_metrics.json`, `vacancy_pressure_calibration.json`
+
+Each prediction file publishes:
+- `point_estimate` plus `interval_low`/`interval_high` or `probability`
+- horizon-specific backtest score (`backtest_metric`, `backtest_value`)
+- baseline comparison (`baseline_metric`, `baseline_value`)
+- one-line caveat (`caveat`)
+
+### F3. Mirror template for all regions
+
+```bash
+python scripts/forecast_playbook/run_forecast_playbook.py \
+  --edition march2026 \
+  --all-regions
+```
+
+Consolidated scoreboard:
+- `data/processed/forecasts/march2026/forecast_playbook_scoreboard.parquet`
+
+### F4. Per-target command templates (single region)
+
+Use `--region "London"` for worked example; replace with any region string from `ons_uk_hpi_monthly_march2026_1_tidy.parquet`.
+
+```bash
+python scripts/forecast_playbook/run_hpi_growth_target.py --edition march2026 --region "London" --output-dir data/processed/forecasts/march2026/london
+python scripts/forecast_playbook/run_affordability_target.py --region "London" --output-dir data/processed/forecasts/march2026/london
+python scripts/forecast_playbook/run_quantile_price_band_target.py --region "London" --output-dir data/processed/forecasts/march2026/london
+python scripts/forecast_playbook/run_divergence_risk_target.py --region "London" --output-dir data/processed/forecasts/march2026/london
+python scripts/forecast_playbook/run_supply_shortfall_target.py --region "London" --output-dir data/processed/forecasts/march2026/london
+python scripts/forecast_playbook/run_epc_adoption_target.py --region "London" --output-dir data/processed/forecasts/march2026/london
+python scripts/forecast_playbook/run_vacancy_pressure_target.py --region "London" --output-dir data/processed/forecasts/march2026/london
+```
+
+### F5. Output interpretation rubric
+
+- **Regional HPI growth (12m/24m):** positive point estimate means projected index growth (`hpi_index_t+h / hpi_index_t - 1`); use MAE vs seasonal-naive MAE to judge value add.
+- **Affordability pressure change (1-3y):** positive delta implies worsening affordability pressure; if interval spans zero, direction confidence is low.
+- **LA median price quantile band:** `P10/P50/P90` provide downside/base/upside levels; narrow bands indicate lower cross-LA uncertainty.
+- **Rent-vs-price divergence risk:** `probability` reflects chance that HPI outpaces PRPI; spread estimate gives expected `hpi_minus_prpi_growth_pp` size.
+- **Supply shortfall likelihood:** calibrated probability near 1.0 indicates high risk of demand proxy outgrowing completions; compare Brier score to baseline.
+- **EPC adoption trajectory:** point estimate is expected annual change in `% EPC C+`; positive values indicate faster energy-efficiency adoption.
+- **Vacancy/second-home pressure class:** class probabilities (`rising/stable/falling`) are model output; threshold logic is documented in output rows for explainability.
+
+### F6. Standard caveat
+
+All forecast outputs include:
+- `Macro shocks and policy regime changes are not explicitly modeled in these forecasts.`
+
+---
+
 *End of aligned narrative package.*

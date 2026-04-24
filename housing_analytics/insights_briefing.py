@@ -383,12 +383,17 @@ def build_insights_payload(
         "6a": root / f"ons_price_earnings_ratio_{pe_ed}_6a_tidy.parquet",
         "1c": root / f"ons_price_earnings_ratio_{pe_ed}_1c_tidy.parquet",
         "hb_la": root / f"ons_housebuilding_la_{hb_la_ed}_tidy.parquet",
+        "hb_country": root / f"ons_housebuilding_country_{hb_country_ed}_tidy.parquet",
+        "hpi": root / f"ons_uk_hpi_monthly_{hpi_ed}_1_tidy.parquet",
         "epc1a": root / f"ons_epc_bands_{epc_ed}_1a_tidy.parquet",
         "ee1c": root / f"ons_ee_fiveyear_{ee_ed}_1c_tidy.parquet",
         "median2a": root / f"ons_median_price_existing_admin_{median_ed}_2a_tidy.parquet",
         "census": root / f"{census_stem}.parquet",
         "joined": root / "joined_la_housing_market_snapshot.parquet",
     }
+    required_path_keys: tuple[str, ...] = ("5a", "5b", "5c", "6a", "1c", "hb_la", "epc1a")
+    optional_path_keys: tuple[str, ...] = ("hb_country", "hpi", "ee1c", "median2a", "census", "joined")
+    active_path_keys: tuple[str, ...] = ("5a", "5b", "5c", "6a", "1c", "hb_la", "epc1a", "median2a", "census", "joined")
 
     for sheet in ("5a", "5b", "5c"):
         if not paths[sheet].is_file():
@@ -768,7 +773,7 @@ def build_insights_payload(
     overview.append(disclaimer)
 
     findings_by_tab: dict[str, list[str]] = {
-        "affordability": overview,
+        "affordability": [x for x in (aff_line, aff_region_line) if x] + [disclaimer],
         "entry": [x for x in (entry_line, entry_extra) if x] + [disclaimer],
         "regions": regions_lines + [disclaimer],
         "supply": [x for x in (supply_line, supply_extra_starts, supply_extra_comp) if x] + [disclaimer],
@@ -777,10 +782,23 @@ def build_insights_payload(
 
     findings: list[str] = list(overview)
 
+    required_loaded = sum(1 for k in required_path_keys if paths[k].is_file())
+    optional_loaded = sum(1 for k in optional_path_keys if paths[k].is_file())
+    active_loaded = sum(1 for k in active_path_keys if paths[k].is_file())
+    data_readiness = {
+        "required_loaded": required_loaded,
+        "required_total": len(required_path_keys),
+        "optional_loaded": optional_loaded,
+        "optional_total": len(optional_path_keys),
+        "active_loaded": active_loaded,
+        "active_total": len(active_path_keys),
+    }
+
     return {
         "meta": meta,
         "missing": missing,
         "hero": hero,
+        "findings_overview": overview,
         "findings_by_tab": findings_by_tab,
         "tables": {
             "affordability": aff_df,
@@ -795,5 +813,6 @@ def build_insights_payload(
         "joined_preview": joined_flag,
         "findings": findings,
         "supply_note": supply_note,
+        "data_readiness": data_readiness,
         "paths": {k: str(v) for k, v in paths.items()},
     }

@@ -232,6 +232,11 @@ def test_build_insights_payload_empty_dir_no_raise(tmp_path: Path) -> None:
     assert set(out["missing"].keys()) == {"affordability", "entry", "regions", "supply", "energy"}
     assert set(out["findings_by_tab"].keys()) == {"affordability", "entry", "regions", "supply", "energy"}
     assert out["tables"]["affordability"].empty
+    readiness = out["data_readiness"]
+    assert readiness["required_loaded"] == 0
+    assert readiness["active_loaded"] == 0
+    assert readiness["required_total"] >= 1
+    assert readiness["optional_total"] >= 1
     snap = insights_inputs_snapshot(
         tmp_path,
         pe_ed="x",
@@ -244,3 +249,89 @@ def test_build_insights_payload_empty_dir_no_raise(tmp_path: Path) -> None:
         census_stem="census2021_la_population_2021",
     )
     assert "missing" in snap
+
+
+def test_findings_are_partitioned_between_overview_and_tabs(tmp_path: Path) -> None:
+    y0, y1 = 2021, 2025
+    pe_rows = [
+        {
+            "table_id": "x",
+            "geography_level": "local_authority",
+            "percentile": "median",
+            "local_authority_code": "E06000001",
+            "local_authority_name": "Alpha",
+            "country_region_code": "E12000001",
+            "country_region_name": "North East",
+            "component": "house_price",
+            "period_label": str(y0),
+            "value": 100_000.0,
+        },
+        {
+            "table_id": "x",
+            "geography_level": "local_authority",
+            "percentile": "median",
+            "local_authority_code": "E06000001",
+            "local_authority_name": "Alpha",
+            "country_region_code": "E12000001",
+            "country_region_name": "North East",
+            "component": "house_price",
+            "period_label": str(y1),
+            "value": 130_000.0,
+        },
+    ]
+    d5a = pd.DataFrame(pe_rows)
+    d5b = d5a.copy()
+    d5b["component"] = "earnings"
+    d5b["value"] = [30_000.0, 35_000.0]
+    d5c = d5a.copy()
+    d5c["component"] = "ratio"
+    d5c["value"] = [3.3, 3.7]
+    d6a = d5a.copy()
+    d6a["value"] = [90_000.0, 125_000.0]
+    d1c = pd.DataFrame(
+        [
+            {"geography_level": "region", "name": "England and Wales", "period_label": str(y0), "value": 8.0},
+            {"geography_level": "region", "name": "England and Wales", "period_label": str(y1), "value": 8.6},
+            {"geography_level": "region", "name": "North East", "period_label": str(y0), "value": 5.0},
+            {"geography_level": "region", "name": "North East", "period_label": str(y1), "value": 5.5},
+        ]
+    )
+    hb = pd.DataFrame(
+        [
+            {"financial_year": "2020-2021", "Region or Country Name": "North East", "measure": "starts", "dwellings": 100.0},
+            {"financial_year": "2024-2025", "Region or Country Name": "North East", "measure": "starts", "dwellings": 140.0},
+        ]
+    )
+    epc = pd.DataFrame(
+        [
+            {"country_or_region_name": "North East", "epc_band": "A", "percentage": 2.0},
+            {"country_or_region_name": "North East", "epc_band": "B", "percentage": 10.0},
+            {"country_or_region_name": "North East", "epc_band": "C", "percentage": 30.0},
+        ]
+    )
+    d5a.to_parquet(tmp_path / "ons_price_earnings_ratio_current_5a_tidy.parquet")
+    d5b.to_parquet(tmp_path / "ons_price_earnings_ratio_current_5b_tidy.parquet")
+    d5c.to_parquet(tmp_path / "ons_price_earnings_ratio_current_5c_tidy.parquet")
+    d6a.to_parquet(tmp_path / "ons_price_earnings_ratio_current_6a_tidy.parquet")
+    d1c.to_parquet(tmp_path / "ons_price_earnings_ratio_current_1c_tidy.parquet")
+    hb.to_parquet(tmp_path / "ons_housebuilding_la_current_tidy.parquet")
+    epc.to_parquet(tmp_path / "ons_epc_bands_current_1a_tidy.parquet")
+
+    out = build_insights_payload(
+        tmp_path,
+        pe_ed="current",
+        hb_la_ed="current",
+        hb_country_ed="current",
+        hpi_ed="current",
+        median_ed="current",
+        epc_ed="current",
+        ee_ed="current",
+        census_stem="census2021_la_population_2021",
+        preset=PRESET_NATIONAL,
+        custom_regions=(),
+        horizon_years=5,
+    )
+    overview = out["findings_overview"]
+    aff = out["findings_by_tab"]["affordability"]
+    assert any("Entry pressure" in line for line in overview)
+    assert all("Entry pressure" not in line for line in aff)
